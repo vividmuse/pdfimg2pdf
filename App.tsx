@@ -6,7 +6,7 @@ import LayoutControls from './components/LayoutControls';
 import GroupControls from './components/GroupControls';
 import PreviewArea from './components/PreviewArea';
 import { convertPdfToImages } from './services/pdfService';
-import { FileText, ScrollText } from 'lucide-react';
+import { FileText, ScrollText, Github, User } from 'lucide-react';
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -51,35 +51,47 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans selection:bg-indigo-100 selection:text-indigo-900">
-      
+    <div className="min-h-screen bg-[#fcf7f1] font-['DM Sans'] selection:bg-[#da7756] selection:text-[#ffffff]">
+
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+      <header className="bg-[#ffffff] border-b border-[#e0e0e0] sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="bg-indigo-600 p-2 rounded-lg">
+            <div className="bg-[#d97757] p-2 rounded-lg">
                <ScrollText className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">PDF Stitcher <span className="text-slate-400 font-light">&</span> Seal</h1>
+            <h1 className="text-xl font-bold text-[#383838] tracking-tight font-['Merriweather']">PDF Stitcher <span className="text-[#9e9e9e] font-light">&</span> Seal</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <a
-              href="https://github.com/cclank/NLM2Img"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
-            >
-              GitHub
-            </a>
-            <a
-              href="https://x.com/LufzzLiz"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
-            >
-              Author
-            </a>
-            <div className="text-sm font-medium text-slate-500">
+            <div className="relative group">
+              <a
+                href="https://github.com/cclank/NLM2Img"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#6b6b6b] hover:text-[#383838] transition-colors"
+                aria-label="GitHub Repository"
+              >
+                <Github className="w-5 h-5" />
+              </a>
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-xs text-white bg-[#383838] rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
+                GitHub Repository
+              </div>
+            </div>
+            <div className="relative group">
+              <a
+                href="https://x.com/LufzzLiz"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#6b6b6b] hover:text-[#383838] transition-colors"
+                aria-label="Author Profile"
+              >
+                <User className="w-5 h-5" />
+              </a>
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-xs text-white bg-[#383838] rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
+                Author Profile
+              </div>
+            </div>
+            <div className="text-sm font-medium text-[#6b6b6b] hidden sm:block">
                Privacy First: Processing happens in your browser
             </div>
           </div>
@@ -106,17 +118,17 @@ const App: React.FC = () => {
             
             {/* Sidebar Controls */}
             <div className="lg:col-span-4 space-y-6">
-              <div className="bg-white p-4 rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
+              <div className="bg-[#ffffff] p-4 rounded-xl border border-[#e0e0e0] flex items-center justify-between shadow-sm">
                  <div className="flex items-center space-x-3 overflow-hidden">
-                    <FileText className="w-5 h-5 text-indigo-500 shrink-0" />
-                    <span className="text-sm font-medium text-slate-700 truncate" title={fileName}>{fileName}</span>
+                    <FileText className="w-5 h-5 text-[#d97757] shrink-0" />
+                    <span className="text-sm font-medium text-[#383838] truncate" title={fileName}>{fileName}</span>
                  </div>
                  <button
                    onClick={() => {
                      setStatus(ProcessingStatus.IDLE);
                      setPdfPages([]);
                    }}
-                   className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
+                   className="text-xs text-[#d15648] hover:text-[#d15648] font-medium px-2 py-1 rounded hover:bg-[#fcf7f1] transition-colors"
                  >
                    Change
                  </button>

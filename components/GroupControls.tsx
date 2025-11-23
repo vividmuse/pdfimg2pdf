@@ -41,6 +41,15 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
     if (inputValue === '') {
       setInputValue('1');
       setPagesPerGroup(1);
+    } else {
+      const numValue = parseInt(inputValue);
+      if (isNaN(numValue) || numValue <= 0) {
+        setInputValue('1');
+        setPagesPerGroup(1);
+      } else if (numValue > totalPages) {
+        setInputValue(totalPages.toString());
+        setPagesPerGroup(totalPages);
+      }
     }
   };
 
@@ -48,15 +57,15 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
   const groupCount = Math.ceil(totalPages / pagesPerGroup);
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-      <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center">
-        <FileDigit className="w-5 h-5 mr-2 text-indigo-600" />
+    <div className="bg-[#ffffff] rounded-xl shadow-sm border border-[#e0e0e0] p-6 mb-6">
+      <h2 className="text-lg font-bold text-[#383838] mb-4 flex items-center font-['Merriweather']">
+        <FileDigit className="w-5 h-5 mr-2 text-[#d97757]" />
         Group Pages
       </h2>
 
       <div className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">
+          <label className="block text-sm font-medium text-[#383838] mb-2">
             Pages per group
           </label>
           <div className="flex items-center space-x-3">
@@ -65,22 +74,44 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
               min="1"
               max={totalPages}
               value={pagesPerGroup}
-              onChange={(e) => setPagesPerGroup(parseInt(e.target.value))}
-              className="flex-1 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              onChange={(e) => {
+                const value = parseInt(e.target.value);
+                setPagesPerGroup(value);
+                setInputValue(value.toString());
+              }}
+              className="flex-1 h-2 bg-[#e0e0e0] rounded-lg appearance-none cursor-pointer accent-[#d97757]"
             />
             <input
               type="number"
               min="1"
               max={totalPages}
               value={inputValue}
-              onChange={handleInputChange}
+              onChange={(e) => {
+                const value = e.target.value;
+                setInputValue(value);
+
+                // Allow empty input (for backspace/delete)
+                if (value === '') {
+                  return;
+                }
+
+                const numValue = parseInt(value);
+
+                // Validate and set value
+                if (!isNaN(numValue) && numValue > 0 && numValue <= totalPages) {
+                  setPagesPerGroup(numValue);
+                } else if (!isNaN(numValue) && numValue > totalPages) {
+                  // If value is too large, set to max
+                  setPagesPerGroup(totalPages);
+                }
+              }}
               onBlur={handleInputBlur}
-              className="w-20 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none text-slate-800 text-center"
+              className="w-20 px-3 py-2 border border-[#e0e0e0] rounded-lg focus:ring-2 focus:ring-[#d97757] focus:border-[#d97757] outline-none text-[#383838] text-center bg-[#ffffff]"
             />
           </div>
         </div>
 
-        <div className="text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
+        <div className="text-sm text-[#6b6b6b] bg-[#fcf7f1] p-3 rounded-lg">
           <p>
             <span className="font-medium">{totalPages}</span> pages will be grouped into{' '}
             <span className="font-medium">{groupCount}</span> image{groupCount !== 1 ? 's' : ''}

@@ -13,39 +13,39 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6 sticky top-6 max-h-[calc(100vh-4rem)] overflow-y-auto">
-      <div className="flex items-center space-x-2 border-b border-slate-100 pb-4">
-        <div className="bg-red-100 p-2 rounded-lg">
-          <Palette className="w-5 h-5 text-red-600" />
+    <div className="bg-[#ffffff] rounded-xl shadow-sm border border-[#e0e0e0] p-6 space-y-6 sticky top-6 max-h-[calc(100vh-4rem)] overflow-y-auto">
+      <div className="flex items-center space-x-2 border-b border-[#e0e0e0] pb-4">
+        <div className="bg-[#fcf7f1] p-2 rounded-lg">
+          <Palette className="w-5 h-5 text-[#d97757]" />
         </div>
-        <h2 className="text-lg font-bold text-slate-800">Stamp Designer</h2>
+        <h2 className="text-lg font-bold text-[#383838] font-['Merriweather']">Stamp Designer</h2>
       </div>
 
       {/* Manual Controls */}
       <div className="space-y-4">
         {/* Text Inputs */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Main Text</label>
+          <label className="block text-sm font-medium text-[#383838] mb-1">Main Text</label>
           <div className="relative">
-            <TypeIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-            <input 
+            <TypeIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9e9e9e] w-4 h-4" />
+            <input
               type="text"
               value={config.text}
               maxLength={8}
               onChange={(e) => handleChange('text', e.target.value)}
-              className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-slate-800"
+              className="w-full pl-9 pr-3 py-2 border border-[#e0e0e0] rounded-lg focus:ring-2 focus:ring-[#d97757] focus:border-[#d97757] outline-none text-[#383838] bg-[#ffffff]"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Sub Text</label>
-          <input 
+          <label className="block text-sm font-medium text-[#383838] mb-1">Sub Text</label>
+          <input
             type="text"
             value={config.subText}
             maxLength={12}
             onChange={(e) => handleChange('subText', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none text-slate-800 text-sm"
+            className="w-full px-3 py-2 border border-[#e0e0e0] rounded-lg focus:ring-2 focus:ring-[#d97757] focus:border-[#d97757] outline-none text-[#383838] text-sm bg-[#ffffff]"
           />
         </div>
 

@@ -1,4 +1,4 @@
-import { PdfPageImage, LayoutMode } from '../types';
+import { PdfPageImage, LayoutMode, StampConfig } from '../types';
 
 // We rely on the global window.pdfjsLib loaded via CDN in index.html 
 // to avoid complex bundler configuration for the worker file in this specific environment.
@@ -59,14 +59,8 @@ const calculateOptimalGrid = (count: number, itemWidth: number, itemHeight: numb
     const gridW = cols * itemWidth;
     const gridH = rows * itemHeight;
     
-    // We want to minimize the max dimension (this effectively maximizes the scale factor for a fixed square)
-    // Metric: 1 / max(gridW, gridH)
-    // We just want to minimize Math.max(gridW, gridH)
-    
+    // We want to minimize the max dimension to maximize fill in a square
     const maxDim = Math.max(gridW, gridH);
-    
-    // We also prefer fuller grids (fewer empty spots), but size is primary
-    // Let's strictly minimize the bounding box size required relative to image size
     
     if (bestMetric === -1 || maxDim < bestMetric) {
         bestMetric = maxDim;
@@ -81,7 +75,8 @@ const calculateOptimalGrid = (count: number, itemWidth: number, itemHeight: numb
 export const stitchImagesAndStamp = async (
   images: PdfPageImage[],
   stampCanvas: HTMLCanvasElement | null,
-  layoutMode: LayoutMode = 'vertical'
+  layoutMode: LayoutMode = 'vertical',
+  stampConfig: StampConfig // Need access to padding config
 ): Promise<string> => {
   if (images.length === 0) return '';
 
@@ -92,20 +87,23 @@ export const stitchImagesAndStamp = async (
   let canvasHeight = 0;
   let rows = 0;
   let cols = 0;
+  
+  // Style constants for Comic Strip mode
+  const GUTTER_SIZE = layoutMode === 'grid' ? 40 : 0;
+  const OUTER_PADDING = layoutMode === 'grid' ? 60 : 0;
 
   if (layoutMode === 'vertical') {
     canvasWidth = maxWidth;
     canvasHeight = images.reduce((sum, img) => sum + img.height, 0);
   } else {
-    // GRID MODE
-    const gridConfig = calculateOptimalGrid(images.length, maxWidth, maxHeight);
+    // GRID MODE with Comic Strip spacing
+    const gridConfig = calculateOptimalGrid(images.length, maxWidth + GUTTER_SIZE, maxHeight + GUTTER_SIZE);
     rows = gridConfig.rows;
     cols = gridConfig.cols;
     
-    // The canvas will be a square large enough to fit the grid
-    // The grid dimensions are:
-    const gridPixelWidth = cols * maxWidth;
-    const gridPixelHeight = rows * maxHeight;
+    // Grid dimensions including gutters
+    const gridPixelWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE) + (OUTER_PADDING * 2);
+    const gridPixelHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE) + (OUTER_PADDING * 2);
     
     // Make it a square based on the largest dimension needed
     const squareSize = Math.max(gridPixelWidth, gridPixelHeight);
@@ -138,13 +136,15 @@ export const stitchImagesAndStamp = async (
       currentY += imgData.height;
     }
   } else {
-    // GRID MODE
-    // Center the grid within the square canvas
-    const gridPixelWidth = cols * maxWidth;
-    const gridPixelHeight = rows * maxHeight;
+    // GRID MODE (Comic Strip Effect)
     
-    const startX = (canvasWidth - gridPixelWidth) / 2;
-    const startY = (canvasHeight - gridPixelHeight) / 2;
+    // Calculate total size of the grid content
+    const totalContentWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE);
+    const totalContentHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE);
+    
+    // Center the whole grid block in the square canvas
+    const startX = (canvasWidth - totalContentWidth) / 2;
+    const startY = (canvasHeight - totalContentHeight) / 2;
 
     for (let i = 0; i < images.length; i++) {
       const imgData = images[i];
@@ -155,14 +155,56 @@ export const stitchImagesAndStamp = async (
       const colIndex = i % cols;
       const rowIndex = Math.floor(i / cols);
 
-      // Center the image within its cell if it's smaller than maxWidth/maxHeight
-      const cellX = startX + colIndex * maxWidth;
-      const cellY = startY + rowIndex * maxHeight;
+      // Top-left coordinate for this cell slot
+      const cellX = startX + colIndex * (maxWidth + GUTTER_SIZE);
+      const cellY = startY + rowIndex * (maxHeight + GUTTER_SIZE);
       
+      // Center the image within its specific slot (in case images vary in size, though we use max dimensions)
       const imgX = cellX + (maxWidth - imgData.width) / 2;
       const imgY = cellY + (maxHeight - imgData.height) / 2;
 
+      // -- Comic Strip Styling --
+      
+      // 1. Drop Shadow
+      ctx.shadowColor = "rgba(0, 0, 0, 0.25)";
+      ctx.shadowBlur = 15;
+      ctx.shadowOffsetX = 5;
+      ctx.shadowOffsetY = 5;
+      
+      // 2. Draw Image
       ctx.drawImage(img, imgX, imgY, imgData.width, imgData.height);
+      
+      // Reset Shadow for subsequent strokes
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetX = 0;
+      ctx.shadowOffsetY = 0;
+
+      // 3. Border (Black outline)
+      ctx.strokeStyle = "#1e293b"; // Slate-800
+      ctx.lineWidth = 3;
+      ctx.strokeRect(imgX, imgY, imgData.width, imgData.height);
+
+      // 4. Page Number Badge (Comic order)
+      const badgeSize = 40;
+      const badgeX = imgX + imgData.width - badgeSize / 2; // Right edge
+      const badgeY = imgY + imgData.height - badgeSize / 2; // Bottom edge (or move to corner)
+      
+      // Use top-left corner for numbering usually, or bottom-right
+      // Let's go with Bottom Right inside the frame
+      const numX = imgX + imgData.width - 30;
+      const numY = imgY + imgData.height - 30;
+
+      ctx.beginPath();
+      ctx.arc(numX, numY, 20, 0, Math.PI * 2);
+      ctx.fillStyle = "#1e293b";
+      ctx.fill();
+      
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 20px Inter, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText((i + 1).toString(), numX, numY);
     }
   }
 
@@ -171,18 +213,19 @@ export const stitchImagesAndStamp = async (
     const stampWidth = stampCanvas.width;
     const stampHeight = stampCanvas.height;
     
-    // Scale stamp relative to document size
-    // For grid mode (usually larger), we might want a slightly smaller relative stamp, 
-    // but 20-25% is usually a good standard for visibility.
     const targetStampWidth = Math.min(canvasWidth * 0.2, 500); 
     const scaleRatio = targetStampWidth / stampWidth;
     const targetStampHeight = stampHeight * scaleRatio;
 
-    const marginX = canvasWidth * 0.05;
-    const marginY = canvasWidth * 0.05;
+    // Use user configured padding
+    // We multiply by a factor if the canvas is huge to keep it proportional, 
+    // or just use raw pixels if users prefer precise control. 
+    // Given the variability, raw pixels is safest but let's ensure a minimum safe zone.
+    const userPaddingX = stampConfig.paddingX || 50;
+    const userPaddingY = stampConfig.paddingY || 50;
 
-    const stampX = canvasWidth - targetStampWidth - marginX;
-    const stampY = canvasHeight - targetStampHeight - marginY;
+    const stampX = canvasWidth - targetStampWidth - userPaddingX;
+    const stampY = canvasHeight - targetStampHeight - userPaddingY;
 
     ctx.drawImage(stampCanvas, stampX, stampY, targetStampWidth, targetStampHeight);
   }

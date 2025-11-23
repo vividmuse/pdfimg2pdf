@@ -106,7 +106,8 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({ pages, stampConfig, isProcess
       await new Promise(r => setTimeout(r, 50));
       
       const stampCanvas = createStampCanvas();
-      const url = await stitchImagesAndStamp(pages, stampCanvas, layoutMode);
+      // Pass the whole stampConfig to control positioning
+      const url = await stitchImagesAndStamp(pages, stampCanvas, layoutMode, stampConfig);
       setPreviewUrl(url);
       setIsStitching(false);
     };

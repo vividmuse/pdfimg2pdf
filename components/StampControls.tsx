@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { StampConfig } from '../types';
-import { Sparkles, Type as TypeIcon, Palette, Square, Circle } from 'lucide-react';
+import { Sparkles, Type as TypeIcon, Palette, Square, Circle, Move } from 'lucide-react';
 import { generateStampSuggestion } from '../services/geminiService';
 
 interface StampControlsProps {
@@ -34,7 +34,7 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6 sticky top-6">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6 sticky top-6 max-h-[calc(100vh-4rem)] overflow-y-auto">
       <div className="flex items-center space-x-2 border-b border-slate-100 pb-4">
         <div className="bg-red-100 p-2 rounded-lg">
           <Palette className="w-5 h-5 text-red-600" />
@@ -53,7 +53,7 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
             type="text" 
             value={aiPrompt}
             onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="e.g. 'Approved by Finance Dept'..."
+            placeholder="e.g. 'Approved by Finance'..."
             className="flex-1 text-sm border-indigo-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
           />
           <button 
@@ -72,6 +72,7 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
 
       {/* Manual Controls */}
       <div className="space-y-4">
+        {/* Text Inputs */}
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Main Text</label>
           <div className="relative">
@@ -97,6 +98,7 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
           />
         </div>
 
+        {/* Style Grid */}
         <div className="grid grid-cols-2 gap-4">
           <div>
              <label className="block text-sm font-medium text-slate-700 mb-1">Shape</label>
@@ -127,6 +129,7 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
           </div>
         </div>
 
+        {/* Opacity */}
         <div>
            <div className="flex justify-between items-center mb-1">
              <label className="block text-sm font-medium text-slate-700">Opacity</label>
@@ -141,6 +144,50 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
              onChange={(e) => handleChange('opacity', parseFloat(e.target.value))}
              className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
            />
+        </div>
+
+        <hr className="border-slate-100" />
+        
+        {/* Position / Padding Controls */}
+        <div>
+          <div className="flex items-center mb-3">
+             <Move className="w-4 h-4 text-slate-400 mr-2" />
+             <label className="text-sm font-bold text-slate-700">Position Adjustment</label>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1">
+                <span>Right Padding (X)</span>
+                <span>{config.paddingX}px</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="500" 
+                step="10"
+                value={config.paddingX}
+                onChange={(e) => handleChange('paddingX', parseInt(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+            </div>
+            
+            <div>
+              <div className="flex justify-between text-xs text-slate-500 mb-1">
+                <span>Bottom Padding (Y)</span>
+                <span>{config.paddingY}px</span>
+              </div>
+              <input 
+                type="range" 
+                min="0" 
+                max="500" 
+                step="10"
+                value={config.paddingY}
+                onChange={(e) => handleChange('paddingY', parseInt(e.target.value))}
+                className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+              />
+            </div>
+          </div>
         </div>
 
       </div>

@@ -1,0 +1,5 @@
+{
+  "name": "PDF Stitcher & Stamp",
+  "description": "Convert multi-page PDFs into a single continuous image and apply a custom digital seal/stamp in the bottom-right corner.",
+  "requestFramePermissions": []
+}

@@ -4,10 +4,6 @@
 
 A powerful web application that combines multi-page PDFs into a single continuous image and applies custom digital stamps. Process your PDFs directly in the browser with full privacy - no data leaves your computer.
 
-## Design Inspiration
-
-This project's warm color palette and design aesthetics were inspired by [Lumina Style Studio](https://lumina-style-studio.vercel.app/), which provided the foundation for our "Helpful Warmth" theme.
-
 ## Features
 
 - **PDF Stitching**: Combine multiple PDF pages into a single continuous image
@@ -44,3 +40,8 @@ The Stamp Designer feature can be toggled on/off:
 - When disabled: Process PDFs without adding stamps
 
 To toggle the Stamp Designer, look for the switch in the application interface.
+
+
+## 配色灵感
+
+本项目的温暖配色方案灵感来源于 [Lumina Style Studio](https://lumina-style-studio.vercel.app/)，该设计系统为我们提供了"Helpful Warmth"主题的基础。

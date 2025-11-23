@@ -1,3 +1,4 @@
+
 export enum ProcessingStatus {
   IDLE = 'IDLE',
   PROCESSING_PDF = 'PROCESSING_PDF',
@@ -6,7 +7,7 @@ export enum ProcessingStatus {
   ERROR = 'ERROR'
 }
 
-export type LayoutMode = 'vertical' | 'grid';
+export type LayoutMode = 'vertical' | 'grid' | 'grid-a4';
 
 export interface StampConfig {
   text: string;

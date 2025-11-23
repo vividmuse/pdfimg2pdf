@@ -1,3 +1,4 @@
+
 import { PdfPageImage, LayoutMode, StampConfig } from '../types';
 
 // We rely on the global window.pdfjsLib loaded via CDN in index.html 
@@ -48,22 +49,28 @@ export const convertPdfToImages = async (file: File): Promise<PdfPageImage[]> =>
   return images;
 };
 
-const calculateOptimalGrid = (count: number, itemWidth: number, itemHeight: number) => {
-  let bestMetric = -1;
+const calculateOptimalGrid = (count: number, itemWidth: number, itemHeight: number, targetRatio: number = 1.0) => {
+  let bestMetric = Number.MAX_VALUE;
   let bestRows = Math.ceil(Math.sqrt(count));
   let bestCols = Math.ceil(count / bestRows);
 
-  // Iterate to find the grid configuration that results in the largest content when fit into a square
+  // Iterate to find the grid configuration that results in the largest content when fit into the target aspect ratio
   for (let cols = 1; cols <= count; cols++) {
     const rows = Math.ceil(count / cols);
     const gridW = cols * itemWidth;
     const gridH = rows * itemHeight;
     
-    // We want to minimize the max dimension to maximize fill in a square
-    const maxDim = Math.max(gridW, gridH);
+    // We want to minimize the limiting dimension relative to the aspect ratio
+    // To fit Grid(W, H) into Container(Cw, Ch) where Cw/Ch = targetRatio.
+    // The scale factor S = min(Cw/W, Ch/H). We want to maximize S.
+    // Maximizing S is equivalent to minimizing 1/S = max(W/Cw, H/Ch).
+    // Assuming Cw = 1, then Ch = 1/targetRatio.
+    // Minimize max(W, H * targetRatio).
     
-    if (bestMetric === -1 || maxDim < bestMetric) {
-        bestMetric = maxDim;
+    const metric = Math.max(gridW, gridH * targetRatio);
+    
+    if (metric < bestMetric) {
+        bestMetric = metric;
         bestRows = rows;
         bestCols = cols;
     }
@@ -89,15 +96,18 @@ export const stitchImagesAndStamp = async (
   let cols = 0;
   
   // Style constants for Comic Strip mode
-  const GUTTER_SIZE = layoutMode === 'grid' ? 40 : 0;
-  const OUTER_PADDING = layoutMode === 'grid' ? 60 : 0;
+  const isGrid = layoutMode.startsWith('grid');
+  const GUTTER_SIZE = isGrid ? 40 : 0;
+  const OUTER_PADDING = isGrid ? 60 : 0;
 
   if (layoutMode === 'vertical') {
     canvasWidth = maxWidth;
     canvasHeight = images.reduce((sum, img) => sum + img.height, 0);
   } else {
-    // GRID MODE with Comic Strip spacing
-    const gridConfig = calculateOptimalGrid(images.length, maxWidth + GUTTER_SIZE, maxHeight + GUTTER_SIZE);
+    // GRID MODE (Square or A4)
+    const targetRatio = layoutMode === 'grid-a4' ? 210/297 : 1.0;
+    
+    const gridConfig = calculateOptimalGrid(images.length, maxWidth + GUTTER_SIZE, maxHeight + GUTTER_SIZE, targetRatio);
     rows = gridConfig.rows;
     cols = gridConfig.cols;
     
@@ -105,10 +115,26 @@ export const stitchImagesAndStamp = async (
     const gridPixelWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE) + (OUTER_PADDING * 2);
     const gridPixelHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE) + (OUTER_PADDING * 2);
     
-    // Make it a square based on the largest dimension needed
-    const squareSize = Math.max(gridPixelWidth, gridPixelHeight);
-    canvasWidth = squareSize;
-    canvasHeight = squareSize;
+    // Determine canvas size to match target aspect ratio
+    if (layoutMode === 'grid-a4') {
+        // Fit the grid content into an A4 container
+        // Try matching width
+        let testW = gridPixelWidth;
+        let testH = testW / targetRatio;
+        
+        if (testH < gridPixelHeight) {
+            // If height isn't enough, match height
+            testH = gridPixelHeight;
+            testW = testH * targetRatio;
+        }
+        canvasWidth = testW;
+        canvasHeight = testH;
+    } else {
+        // Square Grid
+        const squareSize = Math.max(gridPixelWidth, gridPixelHeight);
+        canvasWidth = squareSize;
+        canvasHeight = squareSize;
+    }
   }
 
   // 2. Create the master canvas
@@ -138,11 +164,11 @@ export const stitchImagesAndStamp = async (
   } else {
     // GRID MODE (Comic Strip Effect)
     
-    // Calculate total size of the grid content
+    // Calculate total size of the grid content block
     const totalContentWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE);
     const totalContentHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE);
     
-    // Center the whole grid block in the square canvas
+    // Center the whole grid block in the canvas
     const startX = (canvasWidth - totalContentWidth) / 2;
     const startY = (canvasHeight - totalContentHeight) / 2;
 
@@ -159,7 +185,7 @@ export const stitchImagesAndStamp = async (
       const cellX = startX + colIndex * (maxWidth + GUTTER_SIZE);
       const cellY = startY + rowIndex * (maxHeight + GUTTER_SIZE);
       
-      // Center the image within its specific slot (in case images vary in size, though we use max dimensions)
+      // Center the image within its specific slot
       const imgX = cellX + (maxWidth - imgData.width) / 2;
       const imgY = cellY + (maxHeight - imgData.height) / 2;
 
@@ -187,11 +213,10 @@ export const stitchImagesAndStamp = async (
 
       // 4. Page Number Badge (Comic order)
       const badgeSize = 40;
-      const badgeX = imgX + imgData.width - badgeSize / 2; // Right edge
-      const badgeY = imgY + imgData.height - badgeSize / 2; // Bottom edge (or move to corner)
+      const badgeX = imgX + imgData.width - badgeSize / 2; 
+      const badgeY = imgY + imgData.height - badgeSize / 2;
       
-      // Use top-left corner for numbering usually, or bottom-right
-      // Let's go with Bottom Right inside the frame
+      // Bottom Right inside the frame
       const numX = imgX + imgData.width - 30;
       const numY = imgY + imgData.height - 30;
 
@@ -213,19 +238,33 @@ export const stitchImagesAndStamp = async (
     const stampWidth = stampCanvas.width;
     const stampHeight = stampCanvas.height;
     
+    // Calculate target size
     const targetStampWidth = Math.min(canvasWidth * 0.2, 500); 
     const scaleRatio = targetStampWidth / stampWidth;
     const targetStampHeight = stampHeight * scaleRatio;
 
-    // Use user configured padding
-    // We multiply by a factor if the canvas is huge to keep it proportional, 
-    // or just use raw pixels if users prefer precise control. 
-    // Given the variability, raw pixels is safest but let's ensure a minimum safe zone.
-    const userPaddingX = stampConfig.paddingX || 50;
-    const userPaddingY = stampConfig.paddingY || 50;
+    // Determine Anchor Point (Bottom-Right Reference)
+    let referenceRight = canvasWidth;
+    let referenceBottom = canvasHeight;
 
-    const stampX = canvasWidth - targetStampWidth - userPaddingX;
-    const stampY = canvasHeight - targetStampHeight - userPaddingY;
+    if (layoutMode.startsWith('grid')) {
+        // In grid mode, anchor to the actual content bounds
+        const totalContentWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE);
+        const totalContentHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE);
+        
+        const startX = (canvasWidth - totalContentWidth) / 2;
+        const startY = (canvasHeight - totalContentHeight) / 2;
+        
+        referenceRight = startX + totalContentWidth;
+        referenceBottom = startY + totalContentHeight;
+    }
+
+    // Use user configured padding
+    const userPaddingX = stampConfig.paddingX ?? 50;
+    const userPaddingY = stampConfig.paddingY ?? 50;
+
+    const stampX = referenceRight - targetStampWidth - userPaddingX;
+    const stampY = referenceBottom - targetStampHeight - userPaddingY;
 
     ctx.drawImage(stampCanvas, stampX, stampY, targetStampWidth, targetStampHeight);
   }

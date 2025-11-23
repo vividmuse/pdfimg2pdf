@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PdfPageImage, StampConfig, LayoutMode } from '../types';
-import { stitchImagesAndStamp } from '../services/pdfService';
+import { stitchImagesAndStamp, generateGroupedImages } from '../services/pdfService';
 import { Download, Loader2 } from 'lucide-react';
 
 interface PreviewAreaProps {
@@ -8,11 +8,12 @@ interface PreviewAreaProps {
   stampConfig: StampConfig;
   isProcessing: boolean;
   layoutMode: LayoutMode;
+  pagesPerGroup: number;
 }
 
-const PreviewArea: React.FC<PreviewAreaProps> = ({ pages, stampConfig, isProcessing, layoutMode }) => {
+const PreviewArea: React.FC<PreviewAreaProps> = ({ pages, stampConfig, isProcessing, layoutMode, pagesPerGroup }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isStitching, setIsStitching] = useState(false);
 
   // Helper to draw the stamp on a standalone canvas
@@ -96,7 +97,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({ pages, stampConfig, isProcess
     return canvas;
   };
 
-  // Re-generate the stitched image whenever pages, stamp config, or layout mode changes
+  // Re-generate the stitched image whenever pages, stamp config, layout mode, or pages per group changes
   useEffect(() => {
     if (pages.length === 0) return;
 
@@ -104,26 +105,49 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({ pages, stampConfig, isProcess
       setIsStitching(true);
       // Short delay to allow UI to update to loading state
       await new Promise(r => setTimeout(r, 50));
-      
+
       const stampCanvas = createStampCanvas();
-      // Pass the whole stampConfig to control positioning
-      const url = await stitchImagesAndStamp(pages, stampCanvas, layoutMode, stampConfig);
-      setPreviewUrl(url);
+
+      if (layoutMode === 'grouped') {
+        // Generate all grouped images
+        const urls = await generateGroupedImages(pages, stampCanvas, stampConfig, pagesPerGroup);
+        setPreviewUrls(urls);
+      } else {
+        // Generate single image for other layouts
+        const url = await stitchImagesAndStamp(pages, stampCanvas, layoutMode, stampConfig, pagesPerGroup);
+        setPreviewUrls([url]);
+      }
+
       setIsStitching(false);
     };
 
     generate();
-  }, [pages, stampConfig, layoutMode]);
+  }, [pages, stampConfig, layoutMode, pagesPerGroup]);
 
 
-  const handleDownload = () => {
-    if (!previewUrl) return;
+  const handleDownload = (url?: string, index?: number) => {
+    const downloadUrl = url || previewUrls[0];
+    if (!downloadUrl) return;
+
     const link = document.createElement('a');
-    link.href = previewUrl;
-    link.download = `stamped_document_${layoutMode}_${Date.now()}.jpg`;
+    if (layoutMode === 'grouped' && index !== undefined) {
+      link.download = `stamped_document_group_${index + 1}_${Date.now()}.jpg`;
+    } else {
+      link.download = `stamped_document_${layoutMode}_${Date.now()}.jpg`;
+    }
+    link.href = downloadUrl;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const handleDownloadAll = () => {
+    // Download all grouped images
+    previewUrls.forEach((url, index) => {
+      setTimeout(() => {
+        handleDownload(url, index);
+      }, index * 1000); // Add delay to prevent browser from blocking multiple downloads
+    });
   };
 
   if (isProcessing) {
@@ -147,17 +171,29 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({ pages, stampConfig, isProcess
     <div className="space-y-4">
       <div className="flex justify-between items-center">
          <h3 className="text-lg font-bold text-slate-800">Preview</h3>
-         <button 
-           onClick={handleDownload}
-           disabled={!previewUrl || isStitching}
-           className="flex items-center space-x-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
-         >
-           {isStitching ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
-           <span>Download Image</span>
-         </button>
+         <div className="flex space-x-2">
+           {layoutMode === 'grouped' && previewUrls.length > 1 && (
+             <button
+               onClick={handleDownloadAll}
+               disabled={isStitching}
+               className="flex items-center space-x-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+             >
+               {isStitching ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
+               <span>Download All ({previewUrls.length})</span>
+             </button>
+           )}
+           <button
+             onClick={() => handleDownload()}
+             disabled={previewUrls.length === 0 || isStitching}
+             className="flex items-center space-x-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
+           >
+             {isStitching ? <Loader2 className="w-4 h-4 animate-spin"/> : <Download className="w-4 h-4" />}
+             <span>{layoutMode === 'grouped' && previewUrls.length > 1 ? 'Download First' : 'Download Image'}</span>
+           </button>
+         </div>
       </div>
 
-      <div className="relative w-full bg-slate-200 rounded-xl overflow-hidden min-h-[500px] border border-slate-300 shadow-inner flex justify-center items-start p-8 overflow-y-auto max-h-[80vh]">
+      <div className="relative w-full bg-slate-200 rounded-xl overflow-hidden min-h-[500px] border border-slate-300 shadow-inner flex flex-col items-center p-8 overflow-y-auto max-h-[80vh]">
          {isStitching && (
             <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center">
                 <div className="bg-white p-4 rounded-xl shadow-xl flex items-center space-x-3">
@@ -166,12 +202,37 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({ pages, stampConfig, isProcess
                 </div>
             </div>
          )}
-         {previewUrl && (
-            <img 
-              src={previewUrl} 
-              alt="Stitched PDF" 
-              className="shadow-2xl max-w-full h-auto object-contain bg-white" 
-            />
+         {layoutMode === 'grouped' && previewUrls.length > 1 ? (
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+             {previewUrls.map((url, index) => (
+               <div key={index} className="flex flex-col items-center">
+                 <div className="w-full bg-white rounded-lg shadow-md overflow-hidden mb-2">
+                   <img
+                     src={url}
+                     alt={`Group ${index + 1}`}
+                     className="w-full h-auto object-contain"
+                   />
+                 </div>
+                 <div className="flex items-center justify-between w-full">
+                   <span className="text-sm font-medium text-slate-700">Group {index + 1}</span>
+                   <button
+                     onClick={() => handleDownload(url, index)}
+                     className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded transition-colors"
+                   >
+                     Download
+                   </button>
+                 </div>
+               </div>
+             ))}
+           </div>
+         ) : (
+           previewUrls.length > 0 && (
+             <img
+               src={previewUrls[0]}
+               alt="Stitched PDF"
+               className="shadow-2xl max-w-full h-auto object-contain bg-white"
+             />
+           )
          )}
       </div>
     </div>

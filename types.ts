@@ -7,7 +7,7 @@ export enum ProcessingStatus {
   ERROR = 'ERROR'
 }
 
-export type LayoutMode = 'vertical' | 'grid' | 'grid-a4';
+export type LayoutMode = 'vertical' | 'grid' | 'grid-a4' | 'grouped';
 
 export interface StampConfig {
   text: string;

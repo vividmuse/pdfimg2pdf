@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { LayoutMode } from '../types';
-import { Columns, Grid, File } from 'lucide-react';
+import { Columns, Grid, File, FileDigit } from 'lucide-react';
 
 interface LayoutControlsProps {
   currentMode: LayoutMode;
@@ -15,7 +15,7 @@ const LayoutControls: React.FC<LayoutControlsProps> = ({ currentMode, onChange }
         <Columns className="w-5 h-5 mr-2 text-indigo-600" />
         Layout Style
       </h2>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         <button
           onClick={() => onChange('vertical')}
           className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
@@ -33,6 +33,26 @@ const LayoutControls: React.FC<LayoutControlsProps> = ({ currentMode, onChange }
           </div>
           <span className="text-sm font-semibold">Vertical</span>
           <span className="text-xs opacity-70 mt-1 text-center">Scroll</span>
+        </button>
+
+        <button
+          onClick={() => onChange('grouped')}
+          className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${
+            currentMode === 'grouped'
+              ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+              : 'border-slate-200 hover:border-slate-300 text-slate-600'
+          }`}
+        >
+          <div className="mb-2 p-2 bg-white rounded-lg border border-slate-100 shadow-sm">
+             <div className="w-8 h-8 border-2 border-slate-300 rounded-sm mx-auto flex flex-col gap-1 p-1">
+                <div className="h-2 w-full bg-slate-300 rounded-xs"></div>
+                <div className="h-2 w-3/4 bg-slate-300 rounded-xs"></div>
+                <div className="h-2 w-1/2 bg-slate-300 rounded-xs mt-1"></div>
+                <div className="h-2 w-3/4 bg-slate-300 rounded-xs"></div>
+             </div>
+          </div>
+          <span className="text-sm font-semibold">Grouped</span>
+          <span className="text-xs opacity-70 mt-1 text-center">Per Pages</span>
         </button>
 
         <button

@@ -1,7 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { StampConfig } from '../types';
-import { Sparkles, Type as TypeIcon, Palette, Square, Circle, Move } from 'lucide-react';
-import { generateStampSuggestion } from '../services/geminiService';
+import { Type as TypeIcon, Palette, Square, Circle, Move } from 'lucide-react';
 
 interface StampControlsProps {
   config: StampConfig;
@@ -9,28 +8,8 @@ interface StampControlsProps {
 }
 
 const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-
   const handleChange = (key: keyof StampConfig, value: any) => {
     onChange({ ...config, [key]: value });
-  };
-
-  const handleAiGenerate = async () => {
-    if (!aiPrompt.trim()) return;
-    setIsGenerating(true);
-    try {
-      const suggestion = await generateStampSuggestion(aiPrompt);
-      onChange({
-        ...config,
-        text: suggestion.text,
-        subText: suggestion.subText || config.subText
-      });
-    } catch (e) {
-      alert("AI Generation failed. Please check your API Key or try again.");
-    } finally {
-      setIsGenerating(false);
-    }
   };
 
   return (
@@ -40,34 +19,6 @@ const StampControls: React.FC<StampControlsProps> = ({ config, onChange }) => {
           <Palette className="w-5 h-5 text-red-600" />
         </div>
         <h2 className="text-lg font-bold text-slate-800">Stamp Designer</h2>
-      </div>
-
-      {/* AI Generator Section */}
-      <div className="space-y-3 bg-gradient-to-br from-indigo-50 to-purple-50 p-4 rounded-xl border border-indigo-100">
-        <label className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center">
-          <Sparkles className="w-3 h-3 mr-1" />
-          AI Smart Text
-        </label>
-        <div className="flex gap-2">
-          <input 
-            type="text" 
-            value={aiPrompt}
-            onChange={(e) => setAiPrompt(e.target.value)}
-            placeholder="e.g. 'Approved by Finance'..."
-            className="flex-1 text-sm border-indigo-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-          />
-          <button 
-            onClick={handleAiGenerate}
-            disabled={isGenerating || !aiPrompt}
-            className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-          >
-            {isGenerating ? (
-              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <Sparkles className="w-5 h-5" />
-            )}
-          </button>
-        </div>
       </div>
 
       {/* Manual Controls */}

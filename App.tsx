@@ -3,13 +3,23 @@ import { ProcessingStatus, StampConfig, PdfPageImage, LayoutMode } from './types
 import UploadZone from './components/UploadZone';
 import StampControls from './components/StampControls';
 import LayoutControls from './components/LayoutControls';
+import GroupControls from './components/GroupControls';
 import PreviewArea from './components/PreviewArea';
 import { convertPdfToImages } from './services/pdfService';
 import { FileText, ScrollText } from 'lucide-react';
 
+// Get today's date in YYYY-MM-DD format
+const getTodayDate = () => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const DEFAULT_STAMP: StampConfig = {
   text: 'APPROVED',
-  subText: '2024-10-27',
+  subText: getTodayDate(),
   size: 200,
   color: '#D32F2F',
   opacity: 1,
@@ -24,6 +34,7 @@ const App: React.FC = () => {
   const [stampConfig, setStampConfig] = useState<StampConfig>(DEFAULT_STAMP);
   const [fileName, setFileName] = useState<string>('');
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('vertical');
+  const [pagesPerGroup, setPagesPerGroup] = useState<number>(1);
 
   const handleFileSelect = async (file: File) => {
     try {
@@ -100,7 +111,7 @@ const App: React.FC = () => {
                     <FileText className="w-5 h-5 text-indigo-500 shrink-0" />
                     <span className="text-sm font-medium text-slate-700 truncate" title={fileName}>{fileName}</span>
                  </div>
-                 <button 
+                 <button
                    onClick={() => {
                      setStatus(ProcessingStatus.IDLE);
                      setPdfPages([]);
@@ -111,23 +122,32 @@ const App: React.FC = () => {
                  </button>
               </div>
 
-              <LayoutControls 
+              <LayoutControls
                 currentMode={layoutMode}
                 onChange={setLayoutMode}
               />
 
-              <StampControls 
-                config={stampConfig} 
-                onChange={setStampConfig} 
+              {/* Show Group Controls only when grouped layout is selected */}
+              {layoutMode === 'grouped' && (
+                <GroupControls
+                  totalPages={pdfPages.length}
+                  onPageGroupChange={setPagesPerGroup}
+                />
+              )}
+
+              <StampControls
+                config={stampConfig}
+                onChange={setStampConfig}
               />
             </div>
 
             {/* Preview Area */}
             <div className="lg:col-span-8">
-              <PreviewArea 
-                pages={pdfPages} 
-                stampConfig={stampConfig} 
+              <PreviewArea
+                pages={pdfPages}
+                stampConfig={stampConfig}
                 layoutMode={layoutMode}
+                pagesPerGroup={pagesPerGroup}
                 isProcessing={status === ProcessingStatus.PROCESSING_PDF}
               />
             </div>

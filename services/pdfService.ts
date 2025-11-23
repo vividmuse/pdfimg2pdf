@@ -11,7 +11,7 @@ declare global {
 
 export const convertPdfToImages = async (file: File): Promise<PdfPageImage[]> => {
   const arrayBuffer = await file.arrayBuffer();
-  
+
   // Load the document
   const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
   const pdf = await loadingTask.promise;
@@ -25,7 +25,7 @@ export const convertPdfToImages = async (file: File): Promise<PdfPageImage[]> =>
 
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-    
+
     if (!context) continue;
 
     canvas.height = viewport.height;
@@ -47,6 +47,23 @@ export const convertPdfToImages = async (file: File): Promise<PdfPageImage[]> =>
   }
 
   return images;
+};
+
+/**
+ * Group images into chunks based on pages per group
+ * @param images Array of page images
+ * @param pagesPerGroup Number of pages to include in each group
+ * @returns Array of image groups
+ */
+export const groupImages = (images: PdfPageImage[], pagesPerGroup: number): PdfPageImage[][] => {
+  if (pagesPerGroup <= 0) return [images];
+
+  const groups: PdfPageImage[][] = [];
+  for (let i = 0; i < images.length; i += pagesPerGroup) {
+    groups.push(images.slice(i, i + pagesPerGroup));
+  }
+
+  return groups;
 };
 
 const calculateOptimalGrid = (count: number, itemWidth: number, itemHeight: number, targetRatio: number = 1.0) => {
@@ -83,12 +100,19 @@ export const stitchImagesAndStamp = async (
   images: PdfPageImage[],
   stampCanvas: HTMLCanvasElement | null,
   layoutMode: LayoutMode = 'vertical',
-  stampConfig: StampConfig // Need access to padding config
+  stampConfig: StampConfig, // Need access to padding config
+  pagesPerGroup: number = 1 // For grouped layout mode
 ): Promise<string> => {
   if (images.length === 0) return '';
 
-  const maxWidth = Math.max(...images.map(img => img.width));
-  const maxHeight = Math.max(...images.map(img => img.height));
+  // If grouped layout, only process the first group
+  let processedImages = images;
+  if (layoutMode === 'grouped' && pagesPerGroup > 1) {
+    processedImages = images.slice(0, pagesPerGroup);
+  }
+
+  const maxWidth = Math.max(...processedImages.map(img => img.width));
+  const maxHeight = Math.max(...processedImages.map(img => img.height));
 
   let canvasWidth = 0;
   let canvasHeight = 0;
@@ -150,9 +174,9 @@ export const stitchImagesAndStamp = async (
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // 3. Draw images
-  if (layoutMode === 'vertical') {
+  if (layoutMode === 'vertical' || layoutMode === 'grouped') {
     let currentY = 0;
-    for (const imgData of images) {
+    for (const imgData of processedImages) {
       const img = new Image();
       img.src = imgData.blob;
       await new Promise((resolve) => { img.onload = resolve; });
@@ -172,8 +196,8 @@ export const stitchImagesAndStamp = async (
     const startX = (canvasWidth - totalContentWidth) / 2;
     const startY = (canvasHeight - totalContentHeight) / 2;
 
-    for (let i = 0; i < images.length; i++) {
-      const imgData = images[i];
+    for (let i = 0; i < processedImages.length; i++) {
+      const imgData = processedImages[i];
       const img = new Image();
       img.src = imgData.blob;
       await new Promise((resolve) => { img.onload = resolve; });
@@ -270,4 +294,32 @@ export const stitchImagesAndStamp = async (
   }
 
   return canvas.toDataURL('image/jpeg', 0.9);
+};
+
+/**
+ * Generate all grouped images with stamps
+ * @param images Array of all page images
+ * @param stampCanvas Stamp canvas element
+ * @param stampConfig Stamp configuration
+ * @param pagesPerGroup Number of pages per group
+ * @returns Array of data URLs for each group
+ */
+export const generateGroupedImages = async (
+  images: PdfPageImage[],
+  stampCanvas: HTMLCanvasElement | null,
+  stampConfig: StampConfig,
+  pagesPerGroup: number = 1
+): Promise<string[]> => {
+  if (images.length === 0) return [];
+
+  const groupedImages: string[] = [];
+
+  // Process each group
+  for (let i = 0; i < images.length; i += pagesPerGroup) {
+    const group = images.slice(i, i + pagesPerGroup);
+    const imageUrl = await stitchImagesAndStamp(group, stampCanvas, 'grid', stampConfig, 1);
+    groupedImages.push(imageUrl);
+  }
+
+  return groupedImages;
 };

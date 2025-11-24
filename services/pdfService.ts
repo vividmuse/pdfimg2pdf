@@ -499,20 +499,39 @@ export const stitchImagesAndStamp = async (
           i.src = imgData.blob;
         });
 
-      const xOffset = (canvasWidth - imgData.width) / 2;
+      const xOffset = (canvasWidth / canvasScale - imgData.width) / 2;
       ctx.drawImage(img, xOffset, currentY, imgData.width, imgData.height);
       currentY += imgData.height;
     }
   } else {
     // GRID MODE (Comic Strip Effect)
 
-    // Calculate total size of the grid content block
-    const totalContentWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE);
-    const totalContentHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE);
+    // Calculate total size of the grid content block (before any scaling)
+    const rawContentWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE);
+    const rawContentHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE);
 
-    // Center the whole grid block in the canvas
-    const startX = (canvasWidth - totalContentWidth) / 2;
-    const startY = (canvasHeight - totalContentHeight) / 2;
+    // Auto-scale if content exceeds canvas (happens when many pages)
+    const availableWidth = (canvasWidth / canvasScale) - (OUTER_PADDING * 2);
+    const availableHeight = (canvasHeight / canvasScale) - (OUTER_PADDING * 2);
+
+    let contentScale = 1;
+    if (rawContentWidth > availableWidth || rawContentHeight > availableHeight) {
+      const scaleX = availableWidth / rawContentWidth;
+      const scaleY = availableHeight / rawContentHeight;
+      contentScale = Math.min(scaleX, scaleY, 1); // Never scale up, only down
+    }
+
+    // Apply content scale
+    const scaledMaxWidth = maxWidth * contentScale;
+    const scaledMaxHeight = maxHeight * contentScale;
+    const scaledGutter = GUTTER_SIZE * contentScale;
+
+    const totalContentWidth = (cols * scaledMaxWidth) + ((cols - 1) * scaledGutter);
+    const totalContentHeight = (rows * scaledMaxHeight) + ((rows - 1) * scaledGutter);
+
+    // Center the whole grid block in the canvas (accounting for canvas scale)
+    const startX = ((canvasWidth / canvasScale) - totalContentWidth) / 2;
+    const startY = ((canvasHeight / canvasScale) - totalContentHeight) / 2;
 
     for (let i = 0; i < processedImages.length; i++) {
       const imgData = processedImages[i];
@@ -527,13 +546,17 @@ export const stitchImagesAndStamp = async (
       const colIndex = i % cols;
       const rowIndex = Math.floor(i / cols);
 
+      // Scaled dimensions
+      const scaledImgWidth = imgData.width * contentScale;
+      const scaledImgHeight = imgData.height * contentScale;
+
       // Top-left coordinate for this cell slot
-      const cellX = startX + colIndex * (maxWidth + GUTTER_SIZE);
-      const cellY = startY + rowIndex * (maxHeight + GUTTER_SIZE);
+      const cellX = startX + colIndex * (scaledMaxWidth + scaledGutter);
+      const cellY = startY + rowIndex * (scaledMaxHeight + scaledGutter);
 
       // Center the image within its specific slot
-      const imgX = cellX + (maxWidth - imgData.width) / 2;
-      const imgY = cellY + (maxHeight - imgData.height) / 2;
+      const imgX = cellX + (scaledMaxWidth - scaledImgWidth) / 2;
+      const imgY = cellY + (scaledMaxHeight - scaledImgHeight) / 2;
 
       // -- Comic Strip Styling --
 
@@ -543,8 +566,8 @@ export const stitchImagesAndStamp = async (
       ctx.shadowOffsetX = 5;
       ctx.shadowOffsetY = 5;
 
-      // 2. Draw Image
-      ctx.drawImage(img, imgX, imgY, imgData.width, imgData.height);
+      // 2. Draw Image with scaled dimensions
+      ctx.drawImage(img, imgX, imgY, scaledImgWidth, scaledImgHeight);
 
       // Reset Shadow for subsequent strokes
       ctx.shadowColor = "transparent";
@@ -554,8 +577,8 @@ export const stitchImagesAndStamp = async (
 
       // 3. Border (Black outline)
       ctx.strokeStyle = "#1e293b"; // Slate-800
-      ctx.lineWidth = 3;
-      ctx.strokeRect(imgX, imgY, imgData.width, imgData.height);
+      ctx.lineWidth = 3 * contentScale; // Scale border with content
+      ctx.strokeRect(imgX, imgY, scaledImgWidth, scaledImgHeight);
 
       // 4. Page Number Badge (Comic order)
       const badgeSize = 40;

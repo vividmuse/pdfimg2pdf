@@ -263,7 +263,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
     <div className="space-y-4">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden sticky top-6">
         {/* Header */}
-        <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row justify-between sm:items-center gap-3 bg-slate-50">
           <div className="flex items-center space-x-2">
             <Eye className="w-5 h-5 text-indigo-600" />
             <h2 className="font-bold text-slate-800">{t('preview.title')}</h2>
@@ -271,12 +271,12 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
               {pages.length} {pages.length === 1 ? t('common.page') : t('common.pages')}
             </span>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             {previewUrls.length > 1 && (
               <button
                 onClick={handleDownloadAll}
                 disabled={isStitching}
-                className="flex items-center space-x-2 bg-[#d97757] text-white px-4 py-2 rounded-lg hover:bg-[#da7756] transition-colors disabled:opacity-50"
+                className="flex items-center justify-center space-x-2 bg-[#d97757] text-white px-4 py-2 rounded-lg hover:bg-[#da7756] transition-colors disabled:opacity-50 text-sm"
               >
                 {isStitching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 <span>{t('preview.downloadAll', { count: previewUrls.length })}</span>
@@ -285,7 +285,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
             <button
               onClick={() => handleDownload()}
               disabled={previewUrls.length === 0 || isStitching}
-              className="flex items-center space-x-2 bg-[#383838] text-white px-4 py-2 rounded-lg hover:bg-[#6b6b6b] transition-colors disabled:opacity-50"
+              className="flex items-center justify-center space-x-2 bg-[#383838] text-white px-4 py-2 rounded-lg hover:bg-[#6b6b6b] transition-colors disabled:opacity-50 text-sm"
             >
               {isStitching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               <span>{previewUrls.length > 1 ? t('preview.downloadFirst') : t('preview.downloadImage')}</span>
@@ -293,7 +293,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
             <button
               onClick={() => handlePrint()}
               disabled={previewUrls.length === 0 || isStitching}
-              className="flex items-center space-x-2 bg-[#ffffff] text-[#383838] border border-[#e0e0e0] px-4 py-2 rounded-lg hover:bg-[#f5f5f5] transition-colors disabled:opacity-50"
+              className="flex items-center justify-center space-x-2 bg-[#ffffff] text-[#383838] border border-[#e0e0e0] px-4 py-2 rounded-lg hover:bg-[#f5f5f5] transition-colors disabled:opacity-50 text-sm"
             >
               <Printer className="w-4 h-4" />
               <span>{t('common.print')}</span>
@@ -302,7 +302,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
         </div>
       </div>
 
-      <div className="relative w-full bg-[#fcf7f1] rounded-xl overflow-hidden min-h-[500px] border border-[#e0e0e0] shadow-inner flex flex-col items-center p-8 overflow-y-auto max-h-[80vh]">
+      <div className="relative w-full bg-[#fcf7f1] rounded-xl overflow-hidden min-h-[500px] border border-[#e0e0e0] shadow-inner flex flex-col items-center justify-start p-4 sm:p-8 overflow-y-auto max-h-[80vh]">
         {isStitching && (
           <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center">
             <div className="bg-[#ffffff] p-4 rounded-xl shadow-xl flex items-center space-x-3">
@@ -342,11 +342,11 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
           </div>
         ) : (
           previewUrls.length > 0 && (
-            <div className="w-full flex justify-center items-center">
+            <div className="w-full h-full flex items-center justify-center">
               <img
                 src={previewUrls[0]}
                 alt={t('preview.altText')}
-                className="shadow-2xl max-w-full h-auto object-contain bg-white mx-auto rounded-lg"
+                className="shadow-2xl max-w-full max-h-[70vh] h-auto object-contain bg-white rounded-lg"
               />
             </div>
           )

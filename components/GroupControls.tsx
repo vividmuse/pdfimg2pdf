@@ -116,6 +116,29 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
               className="w-20 px-3 py-2 border border-[#e0e0e0] rounded-lg focus:ring-2 focus:ring-[#d97757] focus:border-[#d97757] outline-none text-[#383838] text-center bg-[#ffffff]"
             />
           </div>
+
+          {/* Quick preset buttons */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs text-slate-500 mr-1">Quick:</span>
+            {[2, 3, 4].map((num) => (
+              <button
+                key={num}
+                onClick={() => {
+                  if (num <= totalPages) {
+                    setPagesPerGroup(num);
+                    setInputValue(num.toString());
+                  }
+                }}
+                disabled={num > totalPages}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${pagesPerGroup === num
+                    ? 'bg-[#d97757] text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {num}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="text-sm text-[#6b6b6b] bg-[#fcf7f1] p-3 rounded-lg">

@@ -302,7 +302,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
         </div>
       </div>
 
-      <div className="relative w-full bg-[#fcf7f1] rounded-xl overflow-hidden min-h-[500px] border border-[#e0e0e0] shadow-inner flex flex-col items-center justify-start p-4 sm:p-8 overflow-y-auto max-h-[80vh]">
+      <div className="relative w-full bg-[#fcf7f1] rounded-xl overflow-hidden min-h-[500px] border border-[#e0e0e0] shadow-inner p-4 sm:p-8 overflow-y-auto max-h-[80vh]">
         {isStitching && (
           <div className="absolute inset-0 bg-white/50 backdrop-blur-sm z-10 flex items-center justify-center">
             <div className="bg-[#ffffff] p-4 rounded-xl shadow-xl flex items-center space-x-3">
@@ -342,7 +342,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
           </div>
         ) : (
           previewUrls.length > 0 && (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="w-full min-h-[450px] flex items-center justify-center">
               <img
                 src={previewUrls[0]}
                 alt={t('preview.altText')}

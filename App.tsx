@@ -38,7 +38,7 @@ const App: React.FC = () => {
   const [pdfPages, setPdfPages] = useState<PdfPageImage[]>([]);
   const [stampConfig, setStampConfig] = useState<StampConfig>(DEFAULT_STAMP);
   const [fileName, setFileName] = useState<string>('');
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>('vertical');
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid-a4');
   const [pagesPerGroup, setPagesPerGroup] = useState<number>(1);
   const [showStampDesigner, setShowStampDesigner] = useState(false);
   const [processingConfig, setProcessingConfig] = useState<ProcessingConfig>({

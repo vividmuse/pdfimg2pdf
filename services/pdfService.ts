@@ -8,6 +8,45 @@ declare global {
   }
 }
 
+// Mobile Canvas size limits
+// iOS Safari: 4096x4096 or 16MB total pixels
+// Android: Similar limits
+const MAX_CANVAS_DIMENSION = 4096;
+const MAX_CANVAS_AREA = 16777216; // 4096 * 4096
+
+// Detect if running on mobile
+const isMobile = () => {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+};
+
+// Scale down canvas dimensions if they exceed mobile limits
+const getMobileSafeCanvasSize = (width: number, height: number) => {
+  if (!isMobile()) {
+    return { width, height, scale: 1 };
+  }
+
+  // Check dimension limits
+  let scale = 1;
+  if (width > MAX_CANVAS_DIMENSION) {
+    scale = Math.min(scale, MAX_CANVAS_DIMENSION / width);
+  }
+  if (height > MAX_CANVAS_DIMENSION) {
+    scale = Math.min(scale, MAX_CANVAS_DIMENSION / height);
+  }
+
+  // Check area limit
+  const area = width * height;
+  if (area > MAX_CANVAS_AREA) {
+    scale = Math.min(scale, Math.sqrt(MAX_CANVAS_AREA / area));
+  }
+
+  // Apply scale
+  const scaledWidth = Math.floor(width * scale);
+  const scaledHeight = Math.floor(height * scale);
+
+  return { width: scaledWidth, height: scaledHeight, scale };
+};
+
 export const convertPdfToImages = async (file: File, mode: 'render' | 'extract' = 'render'): Promise<PdfPageImage[]> => {
   // Handle Image Files
   if (file.type.startsWith('image/')) {
@@ -425,11 +464,17 @@ export const stitchImagesAndStamp = async (
     }
   }
 
+  // Apply mobile Canvas size limits
+  const safeSize = getMobileSafeCanvasSize(canvasWidth, canvasHeight);
+  canvasWidth = safeSize.width;
+  canvasHeight = safeSize.height;
+  const canvasScale = safeSize.scale;
+
   // 2. Create the master canvas
   const canvas = document.createElement('canvas');
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { alpha: false });
 
   if (!ctx) return '';
 
@@ -438,6 +483,11 @@ export const stitchImagesAndStamp = async (
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // 3. Draw images
+  // Scale context if canvas was downsized for mobile
+  if (canvasScale < 1) {
+    ctx.scale(canvasScale, canvasScale);
+  }
+
   if (layoutMode === 'vertical') {
     let currentY = 0;
     for (const imgData of processedImages) {

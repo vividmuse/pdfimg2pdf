@@ -230,18 +230,221 @@ export const convertPdfToImages = async (file: File, mode: 'render' | 'extract' 
   return images;
 };
 
+// Helper to ensure OpenCV is loaded
+const ensureOpenCVLoaded = async (): Promise<void> => {
+  if ((window as any).cv) return;
+
+  // Wait for cv to be available (it's loaded async in index.html)
+  return new Promise((resolve, reject) => {
+    let count = 0;
+    const check = setInterval(() => {
+      if ((window as any).cv) {
+        clearInterval(check);
+        resolve();
+      }
+      count++;
+      if (count > 100) { // Wait up to 10s
+        clearInterval(check);
+        reject(new Error("OpenCV failed to load"));
+      }
+    }, 100);
+  });
+};
+
 const processImage = async (
   imgData: PdfPageImage,
   config: ProcessingConfig
 ): Promise<HTMLImageElement> => {
-  return new Promise((resolve) => {
+  return new Promise(async (resolve) => {
     const img = new Image();
-    img.onload = () => {
-      if (config.threshold === 0 && config.brightness === 0 && config.contrast === 0 && !config.targetColor) {
+    img.onload = async () => {
+      // If no processing needed
+      if (config.threshold === 0 && config.brightness === 0 && config.contrast === 0 && !config.targetColor && !config.autoDewarp && !config.useAdaptiveThreshold) {
         resolve(img);
         return;
       }
 
+      // Check if we need OpenCV
+      const needsOpenCV = config.autoDewarp || config.useAdaptiveThreshold;
+
+      if (needsOpenCV) {
+        try {
+          await ensureOpenCVLoaded();
+          const cv = (window as any).cv;
+
+          // Create canvas to read image data
+          const canvas = document.createElement('canvas');
+          canvas.width = imgData.width;
+          canvas.height = imgData.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) { resolve(img); return; }
+          ctx.drawImage(img, 0, 0);
+
+          let src = cv.imread(canvas);
+          let dst = new cv.Mat();
+
+          // 1. Auto Dewarp / Flatten
+          if (config.autoDewarp) {
+            try {
+              let gray = new cv.Mat();
+              cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+              // Blur to remove noise
+              let blurred = new cv.Mat();
+              cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+
+              // Edge detection
+              let edges = new cv.Mat();
+              cv.Canny(blurred, edges, 75, 200);
+
+              // Find contours
+              let contours = new cv.MatVector();
+              let hierarchy = new cv.Mat();
+              cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+              // Find largest quadrilateral
+              let maxArea = 0;
+              let maxContour = null;
+              let approx = new cv.Mat();
+
+              for (let i = 0; i < contours.size(); ++i) {
+                let cnt = contours.get(i);
+                let area = cv.contourArea(cnt);
+                if (area > 5000) { // Minimum area filter
+                  let peri = cv.arcLength(cnt, true);
+                  let tmp = new cv.Mat();
+                  cv.approxPolyDP(cnt, tmp, 0.02 * peri, true);
+
+                  if (tmp.rows === 4 && area > maxArea) {
+                    maxArea = area;
+                    if (maxContour) maxContour.delete();
+                    maxContour = tmp.clone();
+                  }
+                  tmp.delete();
+                }
+              }
+
+              if (maxContour) {
+                // Order points: tl, tr, br, bl
+                // We need to convert Mat to array of points
+                const points = [];
+                for (let i = 0; i < 4; i++) {
+                  points.push({
+                    x: maxContour.intPtr(i, 0)[0],
+                    y: maxContour.intPtr(i, 0)[1]
+                  });
+                }
+
+                // Sort points
+                // Top-left has smallest sum, Bottom-right has largest sum
+                // Top-right has smallest diff, Bottom-left has largest diff
+                points.sort((a, b) => a.y - b.y); // Sort by Y first
+                // Top 2 are top points, Bottom 2 are bottom points
+                const topPoints = points.slice(0, 2).sort((a, b) => a.x - b.x);
+                const bottomPoints = points.slice(2, 4).sort((a, b) => a.x - b.x);
+
+                const tl = topPoints[0];
+                const tr = topPoints[1];
+                const bl = bottomPoints[0];
+                const br = bottomPoints[1];
+
+                // Calculate width and height of new image
+                const widthA = Math.sqrt(Math.pow(br.x - bl.x, 2) + Math.pow(br.y - bl.y, 2));
+                const widthB = Math.sqrt(Math.pow(tr.x - tl.x, 2) + Math.pow(tr.y - tl.y, 2));
+                const maxWidth = Math.max(widthA, widthB);
+
+                const heightA = Math.sqrt(Math.pow(tr.x - br.x, 2) + Math.pow(tr.y - br.y, 2));
+                const heightB = Math.sqrt(Math.pow(tl.x - bl.x, 2) + Math.pow(tl.y - bl.y, 2));
+                const maxHeight = Math.max(heightA, heightB);
+
+                // Perspective transform
+                let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
+                let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth, 0, maxWidth, maxHeight, 0, maxHeight]);
+
+                let M = cv.getPerspectiveTransform(srcTri, dstTri);
+                cv.warpPerspective(src, dst, M, new cv.Size(maxWidth, maxHeight));
+
+                // Update src to point to the warped image for next steps
+                src.delete();
+                src = dst.clone(); // dst is now our source
+
+                // Cleanup
+                srcTri.delete(); dstTri.delete(); M.delete();
+                gray.delete(); blurred.delete(); edges.delete();
+                contours.delete(); hierarchy.delete(); approx.delete();
+                if (maxContour) maxContour.delete();
+
+              } else {
+                // No contour found, cleanup
+                gray.delete(); blurred.delete(); edges.delete();
+                contours.delete(); hierarchy.delete(); approx.delete();
+              }
+            } catch (e) {
+              console.error("Dewarp error", e);
+            }
+          }
+
+          // 2. Advanced Whitening (Adaptive Threshold)
+          if (config.useAdaptiveThreshold) {
+            let gray = new cv.Mat();
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+            // Adaptive Threshold
+            // ADAPTIVE_THRESH_GAUSSIAN_C is usually better for text
+            // Block size 11, C = 2
+            cv.adaptiveThreshold(gray, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 21, 10);
+
+            // Convert back to RGBA
+            cv.cvtColor(dst, dst, cv.COLOR_GRAY2RGBA);
+
+            src.delete();
+            src = dst.clone();
+            gray.delete();
+          }
+
+          // 3. Apply Brightness/Contrast if still needed (on top of OpenCV result)
+          // Note: Standard threshold is ignored if Adaptive is on, or we could apply it?
+          // Usually Adaptive Threshold results in binary image, so brightness/contrast might not do much unless we do it BEFORE.
+          // But let's stick to the flow. If Adaptive is OFF, we might still want standard processing.
+
+          // If we did NOT do adaptive threshold, we might still want to do standard processing using the Canvas API
+          // because it's faster/easier for simple pixel manipulation than OpenCV loops in JS.
+          // So let's write the OpenCV result back to canvas and then continue with standard processing if needed.
+
+          cv.imshow(canvas, src);
+          src.delete(); dst.delete();
+
+          // Now 'canvas' has the OpenCV processed image.
+          // If we need further standard processing (like color removal or standard brightness/contrast on non-binary image)
+          // we can continue.
+
+          // If Adaptive Threshold was used, the image is already B&W (255/0).
+          // Brightness/Contrast/Color removal might not be needed or effective.
+          if (config.useAdaptiveThreshold) {
+            // We are done
+            const processedImg = new Image();
+            processedImg.onload = () => resolve(processedImg);
+            processedImg.src = canvas.toDataURL();
+            return;
+          }
+
+          // If only Dewarp was used, we still need to apply standard Brightness/Contrast/Threshold
+          // So we fall through to the standard logic below, but using the updated canvas.
+          const ctx2 = canvas.getContext('2d');
+          if (!ctx2) { resolve(img); return; }
+          // Get the data from the updated canvas
+          const imageData = ctx2.getImageData(0, 0, canvas.width, canvas.height);
+          // ... continue to standard logic
+          processStandard(imageData, config, ctx2, resolve);
+          return;
+
+        } catch (e) {
+          console.error("OpenCV processing failed", e);
+          // Fallback to standard
+        }
+      }
+
+      // Standard Processing (Canvas API)
       const canvas = document.createElement('canvas');
       canvas.width = imgData.width;
       canvas.height = imgData.height;
@@ -250,100 +453,103 @@ const processImage = async (
         resolve(img);
         return;
       }
-
       ctx.drawImage(img, 0, 0);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      const threshold = config.threshold;
-      const brightness = config.brightness;
-      const contrast = config.contrast;
-      const targetColor = config.targetColor;
-      const colorTolerance = config.colorTolerance || 20;
+      processStandard(imageData, config, ctx, resolve);
+    };
+    img.src = imgData.blob;
+  });
+};
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
+const processStandard = (imageData: ImageData, config: ProcessingConfig, ctx: CanvasRenderingContext2D, resolve: (img: HTMLImageElement) => void) => {
+  const data = imageData.data;
+  const threshold = config.threshold;
+  const brightness = config.brightness;
+  const contrast = config.contrast;
+  const targetColor = config.targetColor;
+  const colorTolerance = config.colorTolerance || 20;
 
-        let isBackground = false;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
 
-        // 1. Check Color-based Background Removal (using ORIGINAL pixel values)
-        if (targetColor) {
-          const colorDistance = Math.sqrt(
-            Math.pow(r - targetColor.r, 2) +
-            Math.pow(g - targetColor.g, 2) +
-            Math.pow(b - targetColor.b, 2)
-          );
-          // Normalize distance to 0-100 scale
-          const normalizedDistance = (colorDistance / 441) * 100;
+    let isBackground = false;
 
-          if (normalizedDistance < colorTolerance) {
-            isBackground = true;
-          }
-        }
+    // 1. Check Color-based Background Removal (using ORIGINAL pixel values)
+    if (targetColor) {
+      const colorDistance = Math.sqrt(
+        Math.pow(r - targetColor.r, 2) +
+        Math.pow(g - targetColor.g, 2) +
+        Math.pow(b - targetColor.b, 2)
+      );
+      // Normalize distance to 0-100 scale
+      const normalizedDistance = (colorDistance / 441) * 100;
 
-        if (isBackground) {
-          // Set to white
+      if (normalizedDistance < colorTolerance) {
+        isBackground = true;
+      }
+    }
+
+    if (isBackground) {
+      // Set to white
+      data[i] = 255;
+      data[i + 1] = 255;
+      data[i + 2] = 255;
+    } else {
+      // Foreground processing
+      let newR = r;
+      let newG = g;
+      let newB = b;
+
+      // 2. Apply Brightness
+      if (brightness !== 0) {
+        newR = Math.max(0, Math.min(255, newR + brightness * 2.55));
+        newG = Math.max(0, Math.min(255, newG + brightness * 2.55));
+        newB = Math.max(0, Math.min(255, newB + brightness * 2.55));
+      }
+
+      // 3. Apply Contrast
+      if (contrast !== 0) {
+        const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+        newR = Math.max(0, Math.min(255, factor * (newR - 128) + 128));
+        newG = Math.max(0, Math.min(255, factor * (newG - 128) + 128));
+        newB = Math.max(0, Math.min(255, factor * (newB - 128) + 128));
+      }
+
+      // 4. Apply Threshold (Grayscale logic)
+      // We apply this even if targetColor was used, to clean up the remaining foreground
+      if (threshold > 0) {
+        // Invert threshold: input is "strength" (0-255), so actual threshold is 255 - strength
+        // Strength 0 -> Threshold 255 (Safe)
+        // Strength 50 -> Threshold 205 (Removes light gray)
+        const actualThreshold = 255 - threshold;
+
+        const gray = 0.299 * newR + 0.587 * newG + 0.114 * newB;
+        if (gray > actualThreshold) {
+          // This pixel is light enough to be background
           data[i] = 255;
           data[i + 1] = 255;
           data[i + 2] = 255;
         } else {
-          // Foreground processing
-          let newR = r;
-          let newG = g;
-          let newB = b;
-
-          // 2. Apply Brightness
-          if (brightness !== 0) {
-            newR = Math.max(0, Math.min(255, newR + brightness * 2.55));
-            newG = Math.max(0, Math.min(255, newG + brightness * 2.55));
-            newB = Math.max(0, Math.min(255, newB + brightness * 2.55));
-          }
-
-          // 3. Apply Contrast
-          if (contrast !== 0) {
-            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
-            newR = Math.max(0, Math.min(255, factor * (newR - 128) + 128));
-            newG = Math.max(0, Math.min(255, factor * (newG - 128) + 128));
-            newB = Math.max(0, Math.min(255, factor * (newB - 128) + 128));
-          }
-
-          // 4. Apply Threshold (Grayscale logic)
-          // We apply this even if targetColor was used, to clean up the remaining foreground
-          if (threshold > 0) {
-            // Invert threshold: input is "strength" (0-255), so actual threshold is 255 - strength
-            // Strength 0 -> Threshold 255 (Safe)
-            // Strength 50 -> Threshold 205 (Removes light gray)
-            const actualThreshold = 255 - threshold;
-
-            const gray = 0.299 * newR + 0.587 * newG + 0.114 * newB;
-            if (gray > actualThreshold) {
-              // This pixel is light enough to be background
-              data[i] = 255;
-              data[i + 1] = 255;
-              data[i + 2] = 255;
-            } else {
-              // Keep the processed color (or could force to black if desired, but keeping color is safer)
-              data[i] = newR;
-              data[i + 1] = newG;
-              data[i + 2] = newB;
-            }
-          } else {
-            // No threshold, just save the B/C adjusted values
-            data[i] = newR;
-            data[i + 1] = newG;
-            data[i + 2] = newB;
-          }
+          // Keep the processed color (or could force to black if desired, but keeping color is safer)
+          data[i] = newR;
+          data[i + 1] = newG;
+          data[i + 2] = newB;
         }
+      } else {
+        // No threshold, just save the B/C adjusted values
+        data[i] = newR;
+        data[i + 1] = newG;
+        data[i + 2] = newB;
       }
+    }
+  }
 
-      ctx.putImageData(imageData, 0, 0);
-      const processedImg = new Image();
-      processedImg.onload = () => resolve(processedImg);
-      processedImg.src = canvas.toDataURL();
-    };
-    img.src = imgData.blob;
-  });
+  ctx.putImageData(imageData, 0, 0);
+  const processedImg = new Image();
+  processedImg.onload = () => resolve(processedImg);
+  processedImg.src = ctx.canvas.toDataURL();
 };
 
 /**

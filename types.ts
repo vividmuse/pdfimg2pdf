@@ -16,11 +16,13 @@ export interface PageConfig {
 }
 
 export interface ProcessingConfig {
-  threshold: number; // 0-255, for white background
+  threshold: number; // 0-100 (0 = off)
   brightness: number; // -100 to 100
   contrast: number; // -100 to 100
-  targetColor?: { r: number; g: number; b: number }; // Color to remove
-  colorTolerance?: number; // 0-100, tolerance for color matching
+  targetColor?: { r: number; g: number; b: number };
+  colorTolerance?: number; // 0-100
+  useAdaptiveThreshold?: boolean;
+  autoDewarp?: boolean;
 }
 
 export interface StampConfig {

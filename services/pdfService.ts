@@ -261,62 +261,78 @@ const processImage = async (
       const colorTolerance = config.colorTolerance || 20;
 
       for (let i = 0; i < data.length; i += 4) {
-        let r = data[i];
-        let g = data[i + 1];
-        let b = data[i + 2];
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
 
-        // Apply brightness
-        if (brightness !== 0) {
-          r = Math.max(0, Math.min(255, r + brightness * 2.55));
-          g = Math.max(0, Math.min(255, g + brightness * 2.55));
-          b = Math.max(0, Math.min(255, b + brightness * 2.55));
-        }
+        let isBackground = false;
 
-        // Apply contrast
-        if (contrast !== 0) {
-          const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
-          r = Math.max(0, Math.min(255, factor * (r - 128) + 128));
-          g = Math.max(0, Math.min(255, factor * (g - 128) + 128));
-          b = Math.max(0, Math.min(255, factor * (b - 128) + 128));
-        }
-
-        // Apply color-based background removal (if targetColor is set)
+        // 1. Check Color-based Background Removal (using ORIGINAL pixel values)
         if (targetColor) {
           const colorDistance = Math.sqrt(
             Math.pow(r - targetColor.r, 2) +
             Math.pow(g - targetColor.g, 2) +
             Math.pow(b - targetColor.b, 2)
           );
-          // Normalize distance to 0-100 scale (max distance is sqrt(3*255^2) ≈ 441)
+          // Normalize distance to 0-100 scale
           const normalizedDistance = (colorDistance / 441) * 100;
 
           if (normalizedDistance < colorTolerance) {
-            // Make this pixel white
-            data[i] = 255;
-            data[i + 1] = 255;
-            data[i + 2] = 255;
-          } else {
-            data[i] = r;
-            data[i + 1] = g;
-            data[i + 2] = b;
+            isBackground = true;
           }
+        }
+
+        if (isBackground) {
+          // Set to white
+          data[i] = 255;
+          data[i + 1] = 255;
+          data[i + 2] = 255;
         } else {
-          // Apply threshold (grayscale-based background removal)
+          // Foreground processing
+          let newR = r;
+          let newG = g;
+          let newB = b;
+
+          // 2. Apply Brightness
+          if (brightness !== 0) {
+            newR = Math.max(0, Math.min(255, newR + brightness * 2.55));
+            newG = Math.max(0, Math.min(255, newG + brightness * 2.55));
+            newB = Math.max(0, Math.min(255, newB + brightness * 2.55));
+          }
+
+          // 3. Apply Contrast
+          if (contrast !== 0) {
+            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+            newR = Math.max(0, Math.min(255, factor * (newR - 128) + 128));
+            newG = Math.max(0, Math.min(255, factor * (newG - 128) + 128));
+            newB = Math.max(0, Math.min(255, factor * (newB - 128) + 128));
+          }
+
+          // 4. Apply Threshold (Grayscale logic)
+          // We apply this even if targetColor was used, to clean up the remaining foreground
           if (threshold > 0) {
-            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-            if (gray > threshold) {
+            // Invert threshold: input is "strength" (0-255), so actual threshold is 255 - strength
+            // Strength 0 -> Threshold 255 (Safe)
+            // Strength 50 -> Threshold 205 (Removes light gray)
+            const actualThreshold = 255 - threshold;
+
+            const gray = 0.299 * newR + 0.587 * newG + 0.114 * newB;
+            if (gray > actualThreshold) {
+              // This pixel is light enough to be background
               data[i] = 255;
               data[i + 1] = 255;
               data[i + 2] = 255;
             } else {
-              data[i] = r;
-              data[i + 1] = g;
-              data[i + 2] = b;
+              // Keep the processed color (or could force to black if desired, but keeping color is safer)
+              data[i] = newR;
+              data[i + 1] = newG;
+              data[i + 2] = newB;
             }
           } else {
-            data[i] = r;
-            data[i + 1] = g;
-            data[i + 2] = b;
+            // No threshold, just save the B/C adjusted values
+            data[i] = newR;
+            data[i + 1] = newG;
+            data[i + 2] = newB;
           }
         }
       }

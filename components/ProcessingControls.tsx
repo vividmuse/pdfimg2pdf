@@ -88,7 +88,7 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
                 <input
                     type="range"
                     min="0"
-                    max="255"
+                    max="200"
                     value={config.threshold}
                     onChange={(e) => handleChange('threshold', parseInt(e.target.value))}
                     className="w-full h-1.5 bg-[#e0e0e0] rounded-lg appearance-none cursor-pointer accent-[#d97757]"

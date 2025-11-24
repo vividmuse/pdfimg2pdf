@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { ProcessingStatus, StampConfig, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation, PageConfig } from './types';
+import { ProcessingStatus, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation } from './types';
 import UploadZone from './components/UploadZone';
-import StampControls from './components/StampControls';
 import LayoutControls from './components/LayoutControls';
 import ProcessingControls from './components/ProcessingControls';
 import GroupControls from './components/GroupControls';
@@ -12,45 +11,20 @@ import { FileText, ScrollText, Github, User } from 'lucide-react';
 import { useTranslation } from './src/i18n/LanguageContext';
 import LanguageSwitcher from './src/components/LanguageSwitcher';
 
-// Get today's date in YYYY-MM-DD format
-const getTodayDate = () => {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0');
-  const day = String(today.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const DEFAULT_STAMP: StampConfig = {
-  text: 'APPROVED',
-  subText: getTodayDate(),
-  size: 200,
-  color: '#D32F2F',
-  opacity: 1,
-  shape: 'square',
-  paddingX: 50,
-  paddingY: 50,
-};
-
 const App: React.FC = () => {
   const { t } = useTranslation();
   const [status, setStatus] = useState<ProcessingStatus>(ProcessingStatus.IDLE);
   const [pdfPages, setPdfPages] = useState<PdfPageImage[]>([]);
-  const [stampConfig, setStampConfig] = useState<StampConfig>(DEFAULT_STAMP);
   const [fileName, setFileName] = useState<string>('');
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('grid-a4');
   const [pagesPerGroup, setPagesPerGroup] = useState<number>(1);
-  const [showStampDesigner, setShowStampDesigner] = useState(false);
   const [processingConfig, setProcessingConfig] = useState<ProcessingConfig>({
     threshold: 0,
     brightness: 0,
-    contrast: 0
+    contrast: 0,
+    strongBinarize: false
   });
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
-  const [pageConfig, setPageConfig] = useState<PageConfig>({
-    headerText: window.location.hostname,
-    footerText: ''
-  });
 
   const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'render') => {
     try {
@@ -205,8 +179,6 @@ const App: React.FC = () => {
                 onChange={handleLayoutChange}
                 orientation={orientation}
                 onOrientationChange={setOrientation}
-                pageConfig={pageConfig}
-                onPageConfigChange={setPageConfig}
               />
 
               <ProcessingControls
@@ -215,38 +187,11 @@ const App: React.FC = () => {
                 sampleImage={pdfPages[0]}
               />
 
-              {/* Stamp Designer Toggle - Place after Layout Controls for consistent flow */}
-              <div className="bg-[#ffffff] p-4 rounded-xl border border-[#e0e0e0] shadow-sm">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-[#383838]">{t('app.stampDesigner')}</span>
-                  <button
-                    onClick={() => setShowStampDesigner(!showStampDesigner)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${showStampDesigner ? 'bg-[#d97757]' : 'bg-[#e0e0e0]'
-                      }`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showStampDesigner ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                    />
-                  </button>
-                </div>
-                <p className="text-xs text-[#6b6b6b] mt-2">
-                  {showStampDesigner ? t('app.stampDesigner.enabled') : t('app.stampDesigner.disabled')}
-                </p>
-              </div>
-
               {/* Group Controls - Always visible now to allow merging pages */}
               <GroupControls
                 totalPages={pdfPages.length}
                 onPageGroupChange={setPagesPerGroup}
               />
-
-              {showStampDesigner && (
-                <StampControls
-                  config={stampConfig}
-                  onChange={setStampConfig}
-                />
-              )}
             </div>
 
             {/* Preview Area */}
@@ -261,14 +206,11 @@ const App: React.FC = () => {
               />
               <PreviewArea
                 pages={pdfPages}
-                stampConfig={stampConfig}
                 layoutMode={layoutMode}
                 pagesPerGroup={pagesPerGroup}
                 isProcessing={status === ProcessingStatus.PROCESSING_PDF}
-                showStampDesigner={showStampDesigner}
                 processingConfig={processingConfig}
                 orientation={orientation}
-                pageConfig={pageConfig}
               />
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { PdfPageImage, LayoutMode, StampConfig, ProcessingConfig, PageOrientation, PageConfig } from '../types';
+import { PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation } from '../types';
 
 // We rely on the global window.pdfjsLib loaded via CDN in index.html 
 // to avoid complex bundler configuration for the worker file in this specific environment.
@@ -47,7 +47,7 @@ const getMobileSafeCanvasSize = (width: number, height: number) => {
   return { width: scaledWidth, height: scaledHeight, scale };
 };
 
-export const convertPdfToImages = async (file: File, mode: 'render' | 'extract' = 'render'): Promise<PdfPageImage[]> => {
+export const convertPdfToImages = async (file: File, mode: 'render' | 'extract' = 'render', targetWidth?: number): Promise<PdfPageImage[]> => {
   // Handle Image Files
   if (file.type.startsWith('image/')) {
     return new Promise((resolve) => {
@@ -200,7 +200,30 @@ export const convertPdfToImages = async (file: File, mode: 'render' | 'extract' 
       }
     } else {
       // RENDER MODE (Original)
-      const scale = 2.0; // Higher scale for better quality
+      // Dynamic Scaling Calculation (Matched to Reference)
+      const baseViewport = page.getViewport({ scale: 1.0 });
+      const pageArea = baseViewport.width * baseViewport.height;
+      const a4Area = 595 * 842; // A4 area
+
+      let scale = 2.0;
+
+      if (targetWidth) {
+        const widthScale = targetWidth / baseViewport.width;
+        // If page is large (like A4), use higher quality scale
+        if (pageArea > a4Area * 0.8) {
+          scale = widthScale * 2.5;
+        } else {
+          scale = widthScale;
+        }
+      } else {
+        // Default high quality
+        scale = Math.min(5.0, 3000 / baseViewport.width);
+        if (scale < 2.0) scale = 2.0;
+      }
+
+      // Cap at 5.0 to prevent crash
+      scale = Math.min(scale, 5.0);
+
       const viewport = page.getViewport({ scale });
 
       const canvas = document.createElement('canvas');
@@ -232,18 +255,30 @@ export const convertPdfToImages = async (file: File, mode: 'render' | 'extract' 
 
 // Helper to ensure OpenCV is loaded
 const ensureOpenCVLoaded = async (): Promise<void> => {
-  if ((window as any).cv) return;
+  // Wait for cv to be available and ready (wasm init)
+  if ((window as any).cv && (window as any).cv.ready) {
+    await (window as any).cv.ready;
+    return;
+  }
 
-  // Wait for cv to be available (it's loaded async in index.html)
   return new Promise((resolve, reject) => {
     let count = 0;
-    const check = setInterval(() => {
-      if ((window as any).cv) {
-        clearInterval(check);
-        resolve();
+    const check = setInterval(async () => {
+      const cv = (window as any).cv;
+      if (cv) {
+        try {
+          if (cv.ready) {
+            await cv.ready;
+          }
+          clearInterval(check);
+          resolve();
+          return;
+        } catch (e) {
+          // fall through to keep waiting
+        }
       }
       count++;
-      if (count > 100) { // Wait up to 10s
+      if (count > 120) { // Wait up to ~12s
         clearInterval(check);
         reject(new Error("OpenCV failed to load"));
       }
@@ -251,7 +286,419 @@ const ensureOpenCVLoaded = async (): Promise<void> => {
   });
 };
 
-const processImage = async (
+type CvPoint = { x: number; y: number };
+
+const orderPointsClockwise = (points: CvPoint[]): CvPoint[] => {
+  // TL: min(x + y), BR: max(x + y)
+  // TR: min(y - x), BL: max(y - x)
+  let tl = points[0];
+  let br = points[0];
+  let tr = points[0];
+  let bl = points[0];
+
+  let minSum = points[0].x + points[0].y;
+  let maxSum = minSum;
+  let minDiff = points[0].y - points[0].x;
+  let maxDiff = minDiff;
+
+  for (const p of points) {
+    const sum = p.x + p.y;
+    const diff = p.y - p.x;
+
+    if (sum < minSum) {
+      minSum = sum;
+      tl = p;
+    }
+    if (sum > maxSum) {
+      maxSum = sum;
+      br = p;
+    }
+    if (diff < minDiff) {
+      minDiff = diff;
+      tr = p;
+    }
+    if (diff > maxDiff) {
+      maxDiff = diff;
+      bl = p;
+    }
+  }
+
+  return [tl, tr, br, bl];
+};
+
+const warpWithPerspective = (cv: any, src: any, corners: CvPoint[]) => {
+  const [tl, tr, br, bl] = orderPointsClockwise(corners);
+
+  const widthA = Math.hypot(br.x - bl.x, br.y - bl.y);
+  const widthB = Math.hypot(tr.x - tl.x, tr.y - tl.y);
+  const maxWidth = Math.max(widthA, widthB);
+
+  const heightA = Math.hypot(tr.x - br.x, tr.y - br.y);
+  const heightB = Math.hypot(tl.x - bl.x, tl.y - bl.y);
+  const maxHeight = Math.max(heightA, heightB);
+
+  const targetWidth = Math.max(1, Math.round(maxWidth));
+  const targetHeight = Math.max(1, Math.round(maxHeight));
+
+  const dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0, 0,
+    targetWidth, 0,
+    targetWidth, targetHeight,
+    0, targetHeight
+  ]);
+  const srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    tl.x, tl.y,
+    tr.x, tr.y,
+    br.x, br.y,
+    bl.x, bl.y
+  ]);
+
+  const warped = new cv.Mat();
+  const M = cv.getPerspectiveTransform(srcTri, dstTri);
+  cv.warpPerspective(src, warped, M, new cv.Size(targetWidth, targetHeight), cv.INTER_CUBIC, cv.BORDER_REPLICATE);
+
+  srcTri.delete(); dstTri.delete(); M.delete();
+  return warped;
+};
+
+const detectDominantAngle = (cv: any, bin: any): number => {
+  const edges = new cv.Mat();
+  cv.Canny(bin, edges, 50, 150);
+  const lines = new cv.Mat();
+  cv.HoughLines(edges, lines, 1, Math.PI / 180, Math.max(bin.rows, bin.cols) * 0.08);
+
+  let angleSum = 0;
+  let count = 0;
+  for (let i = 0; i < lines.rows; i++) {
+    const theta = lines.data32F[i * 2 + 1];
+    const deg = (theta * 180) / Math.PI;
+    if (deg > 70 && deg < 110) {
+      angleSum += deg - 90;
+      count++;
+    }
+  }
+
+  edges.delete(); lines.delete();
+
+  if (count === 0) return 0;
+  const avg = angleSum / count;
+  return Math.max(-10, Math.min(10, avg));
+};
+
+const cropToDominantPage = (cv: any, src: any): any | null => {
+  // Heuristic: if image is wider than tall, try to locate a central seam and keep the larger side.
+  const width = src.cols;
+  const height = src.rows;
+  if (width < height * 0.95) return null;
+
+  const gray = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+  const blurred = new cv.Mat();
+  cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+
+  // Column-wise average intensity
+  const colMean = new cv.Mat();
+  cv.reduce(blurred, colMean, 0, cv.REDUCE_AVG, cv.CV_32F); // 1 x width
+  const colData = colMean.data32F;
+
+  const searchStart = Math.floor(width * 0.15);
+  const searchEnd = Math.floor(width * 0.85);
+  let minVal = Infinity;
+  let minIdx = -1;
+  let sum = 0;
+  let count = 0;
+
+  for (let x = searchStart; x < searchEnd; x++) {
+    const v = colData[x];
+    sum += v;
+    count++;
+    if (v < minVal) {
+      minVal = v;
+      minIdx = x;
+    }
+  }
+
+  const meanVal = count > 0 ? sum / count : 0;
+
+  gray.delete(); blurred.delete(); colMean.delete();
+
+  if (minIdx === -1) return null;
+
+  const leftWidth = minIdx;
+  const rightWidth = width - minIdx;
+
+  // Allow a lighter seam by default; fall back to forced split if still wide
+  const valleyDeepEnough = meanVal === 0 ? false : (minVal <= meanVal * 0.99);
+  const widthWideEnough = width > height * 1.1; // strong hint of two pages
+
+  if (!valleyDeepEnough && !widthWideEnough) return null;
+
+  const keepRight = rightWidth >= leftWidth;
+  const keptWidth = keepRight ? rightWidth : leftWidth;
+  if (keptWidth < width * 0.3) return null; // kept side too small
+
+  const gutter = 8;
+  let roi: any;
+  if (keepRight) {
+    const x = Math.min(width - 1, minIdx + gutter);
+    roi = new cv.Rect(x, 0, width - x, height);
+  } else {
+    const x = Math.max(0, minIdx - gutter);
+    roi = new cv.Rect(0, 0, Math.max(1, x), height);
+  }
+
+  const cropped = src.roi(roi).clone();
+  return cropped;
+};
+
+const curveFlatten = (cv: any, src: any): any => {
+  const gray = new cv.Mat();
+  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+  const blur = new cv.Mat();
+  cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
+  const bin = new cv.Mat();
+  cv.adaptiveThreshold(blur, bin, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, 21, 10);
+  const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(5, 5));
+  cv.morphologyEx(bin, bin, cv.MORPH_CLOSE, kernel);
+  cv.dilate(bin, bin, kernel);
+
+  const width = src.cols;
+  const height = src.rows;
+  const top: number[] = new Array(width).fill(-1);
+  const bottom: number[] = new Array(width).fill(-1);
+
+  // Scan per column
+  for (let x = 0; x < width; x++) {
+    for (let y = 0; y < height; y++) {
+      if (bin.ucharPtr(y, x)[0] > 0) { top[x] = y; break; }
+    }
+    for (let y = height - 1; y >= 0; y--) {
+      if (bin.ucharPtr(y, x)[0] > 0) { bottom[x] = y; break; }
+    }
+  }
+
+  // Fill missing by nearest
+  let lastTop = -1, lastBottom = -1;
+  for (let x = 0; x < width; x++) {
+    if (top[x] === -1) top[x] = lastTop;
+    else lastTop = top[x];
+    if (bottom[x] === -1) bottom[x] = lastBottom;
+    else lastBottom = bottom[x];
+  }
+  for (let x = width - 1; x >= 0; x--) {
+    if (top[x] === -1) top[x] = lastTop;
+    else lastTop = top[x];
+    if (bottom[x] === -1) bottom[x] = lastBottom;
+    else lastBottom = bottom[x];
+  }
+
+  // Smooth profiles (windowed average)
+  const smooth = (arr: number[], win: number) => {
+    const out = new Array(arr.length).fill(0);
+    const half = Math.floor(win / 2);
+    for (let i = 0; i < arr.length; i++) {
+      let s = 0, c = 0;
+      for (let j = -half; j <= half; j++) {
+        const idx = i + j;
+        if (idx >= 0 && idx < arr.length) {
+          s += arr[idx]; c++;
+        }
+      }
+      out[i] = c ? s / c : arr[i];
+    }
+    return out;
+  };
+  const topSm = smooth(top, 25);
+  const bottomSm = smooth(bottom, 25);
+
+  // Decide if curvature is significant
+  const range = (arr: number[]) => Math.max(...arr) - Math.min(...arr);
+  const topRange = range(topSm);
+  const bottomRange = range(bottomSm);
+  const heightMedian = (() => {
+    const spans = bottomSm.map((b, i) => b - topSm[i]);
+    const sorted = spans.slice().sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  })();
+
+  gray.delete(); blur.delete(); bin.delete(); kernel.delete();
+
+  if (heightMedian <= 0) return src.clone();
+  if (topRange < 6 && bottomRange < 6) return src.clone();
+
+  const dstHeight = Math.max(20, Math.round(heightMedian));
+  const mapX = new cv.Mat(dstHeight, width, cv.CV_32FC1);
+  const mapY = new cv.Mat(dstHeight, width, cv.CV_32FC1);
+
+  for (let y = 0; y < dstHeight; y++) {
+    const rel = y / dstHeight;
+    for (let x = 0; x < width; x++) {
+      const ySrc = topSm[x] + rel * (bottomSm[x] - topSm[x]);
+      mapX.floatPtr(y, x)[0] = x;
+      mapY.floatPtr(y, x)[0] = ySrc;
+    }
+  }
+
+  const dst = new cv.Mat();
+  cv.remap(src, dst, mapX, mapY, cv.INTER_CUBIC, cv.BORDER_REPLICATE, new cv.Scalar());
+  mapX.delete(); mapY.delete();
+  return dst;
+};
+
+const autoDeskewAndCrop = (cv: any, src: any): any => {
+  // Add a replicated border to avoid losing edges during processing
+  let padded = new cv.Mat();
+  cv.copyMakeBorder(src, padded, 8, 8, 8, 8, cv.BORDER_REPLICATE);
+
+  // Pre-crop to dominant page if it's a two-page photo
+  const dominant = cropToDominantPage(cv, padded);
+  if (dominant) {
+    padded.delete();
+    padded = dominant;
+  }
+
+  // Downscale for robust contour detection while keeping ratio
+  const maxDetect = 1200;
+  const maxDim = Math.max(padded.cols, padded.rows);
+  const scale = maxDim > maxDetect ? maxDetect / maxDim : 1;
+  let detectMat: any = new cv.Mat();
+  if (scale < 1) {
+    cv.resize(padded, detectMat, new cv.Size(0, 0), scale, scale, cv.INTER_AREA);
+  } else {
+    detectMat = padded.clone();
+  }
+
+  const gray = new cv.Mat();
+  cv.cvtColor(detectMat, gray, cv.COLOR_RGBA2GRAY);
+
+  const blurred = new cv.Mat();
+  cv.GaussianBlur(gray, blurred, new cv.Size(3, 3), 0);
+
+  // Combine Canny edges with adaptive threshold to get solid page contours
+  const edges = new cv.Mat();
+  cv.Canny(blurred, edges, 50, 150);
+
+  const adaptiveMask = new cv.Mat();
+  cv.adaptiveThreshold(blurred, adaptiveMask, 255, cv.ADAPTIVE_THRESH_MEAN_C, cv.THRESH_BINARY_INV, 41, 15);
+
+  const edgeMask = new cv.Mat();
+  cv.bitwise_or(edges, adaptiveMask, edgeMask);
+
+  const kernel = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(9, 9));
+  cv.morphologyEx(edgeMask, edgeMask, cv.MORPH_CLOSE, kernel);
+  cv.dilate(edgeMask, edgeMask, kernel);
+
+  const contours = new cv.MatVector();
+  const hierarchy = new cv.Mat();
+  cv.findContours(edgeMask, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+  const totalArea = detectMat.cols * detectMat.rows;
+  let bestIdx = -1;
+  let bestArea = 0;
+  let bestScore = -Infinity;
+
+  // Prefer a single, tall page located on the right half (to drop the left page)
+  const centerTarget = detectMat.cols * 0.65;
+  const centerWidth = detectMat.cols;
+
+  for (let i = 0; i < contours.size(); i++) {
+    const cnt = contours.get(i);
+    const area = cv.contourArea(cnt);
+    const areaRatio = area / totalArea;
+
+    if (areaRatio < 0.15) { cnt.delete(); continue; }
+
+    const rect = cv.minAreaRect(cnt);
+    const w = rect.size.width;
+    const h = rect.size.height;
+    const aspect = h > 0 && w > 0 ? Math.max(h, w) / Math.min(h, w) : 1;
+    const portraitBonus = aspect > 1 ? Math.min(aspect, 2.5) / 2.5 : 0.0; // prefer tall pages
+
+    const centerX = rect.center.x;
+    const rightBias = centerX > centerTarget ? 1 : (centerX < centerWidth * 0.45 ? -0.5 : 0);
+
+    // Score: base area + portrait bias + right-page bias
+    const score = areaRatio * 1.0 + portraitBonus * 0.3 + rightBias * 0.2;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestArea = area;
+      bestIdx = i;
+    }
+
+    cnt.delete();
+  }
+
+  let bestContour = bestIdx !== -1 ? contours.get(bestIdx) : null;
+
+  // Cleanup intermediate mats no longer needed
+  contours.delete(); hierarchy.delete();
+  edgeMask.delete(); edges.delete(); adaptiveMask.delete();
+  kernel.delete(); blurred.delete(); gray.delete();
+
+  if (!bestContour || bestArea < totalArea * 0.3) {
+    detectMat.delete();
+    padded.delete();
+    return src.clone();
+  }
+
+  let warped: any = null;
+
+  try {
+    const rect = cv.minAreaRect(bestContour);
+    const box = cv.RotatedRect.points(rect);
+    const corners: CvPoint[] = [];
+    for (let i = 0; i < box.length; i++) {
+      corners.push({
+        x: box[i].x / scale,
+        y: box[i].y / scale
+      });
+    }
+
+    // Disallow extremely thin rectangles which usually mean we grabbed an inner table
+    const ratio = rect.size.width > 0 && rect.size.height > 0 ? Math.max(rect.size.width, rect.size.height) / Math.min(rect.size.width, rect.size.height) : 1;
+    const areaRatio = (rect.size.width * rect.size.height) / totalArea;
+
+    // Require decent coverage and portrait-ish shape to avoid warping a narrow inner table
+  if (areaRatio > 0.35 && ratio > 1.05 && ratio < 2.8) {
+      // Pre-deskew global angle before perspective
+      const tmpGray = new cv.Mat();
+      cv.cvtColor(padded, tmpGray, cv.COLOR_RGBA2GRAY);
+      const tmpBin = new cv.Mat();
+      cv.threshold(tmpGray, tmpBin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
+      const angle = detectDominantAngle(cv, tmpBin);
+      let deskewed = padded.clone();
+      if (Math.abs(angle) > 0.3) {
+        const Mrot = cv.getRotationMatrix2D(new cv.Point(padded.cols / 2, padded.rows / 2), angle, 1);
+        cv.warpAffine(padded, deskewed, Mrot, new cv.Size(padded.cols, padded.rows), cv.INTER_CUBIC, cv.BORDER_REPLICATE);
+        Mrot.delete();
+      }
+      tmpGray.delete(); tmpBin.delete();
+
+      warped = warpWithPerspective(cv, deskewed, corners);
+      deskewed.delete();
+    }
+  } catch (e) {
+    console.error("Perspective crop failed", e);
+  }
+
+  if (!warped) {
+    // Fallback: return original with only border added (no warp) to avoid distortion
+    warped = padded.clone();
+  }
+
+  // Final curve flattening pass for bottom warped text
+  const flattened = curveFlatten(cv, warped);
+
+  bestContour.delete();
+  detectMat.delete();
+  padded.delete();
+
+  warped.delete();
+  return flattened;
+};
+
+  const processImage = async (
   imgData: PdfPageImage,
   config: ProcessingConfig
 ): Promise<HTMLImageElement> => {
@@ -259,18 +706,18 @@ const processImage = async (
     const img = new Image();
     img.onload = async () => {
       // If no processing needed
-      if (config.threshold === 0 && config.brightness === 0 && config.contrast === 0 && !config.targetColor && !config.autoDewarp && !config.useAdaptiveThreshold) {
+      if (config.threshold === 0 && config.brightness === 0 && config.contrast === 0 && !config.targetColor && !config.autoDewarp && !config.useAdaptiveThreshold && !config.strongBinarize) {
         resolve(img);
         return;
       }
 
       // Check if we need OpenCV
-      const needsOpenCV = config.autoDewarp || config.useAdaptiveThreshold;
+      const needsOpenCV = config.autoDewarp || config.useAdaptiveThreshold || config.strongBinarize;
 
-      if (needsOpenCV) {
-        try {
-          await ensureOpenCVLoaded();
-          const cv = (window as any).cv;
+          if (needsOpenCV) {
+            try {
+              await ensureOpenCVLoaded();
+              const cv = (window as any).cv;
 
           // Create canvas to read image data
           const canvas = document.createElement('canvas');
@@ -286,123 +733,121 @@ const processImage = async (
           // 1. Auto Dewarp / Flatten
           if (config.autoDewarp) {
             try {
-              let gray = new cv.Mat();
-              cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-
-              // Blur to remove noise
-              let blurred = new cv.Mat();
-              cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
-
-              // Edge detection
-              let edges = new cv.Mat();
-              cv.Canny(blurred, edges, 75, 200);
-
-              // Find contours
-              let contours = new cv.MatVector();
-              let hierarchy = new cv.Mat();
-              cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
-
-              // Find largest quadrilateral
-              let maxArea = 0;
-              let maxContour = null;
-              let approx = new cv.Mat();
-
-              for (let i = 0; i < contours.size(); ++i) {
-                let cnt = contours.get(i);
-                let area = cv.contourArea(cnt);
-                if (area > 5000) { // Minimum area filter
-                  let peri = cv.arcLength(cnt, true);
-                  let tmp = new cv.Mat();
-                  cv.approxPolyDP(cnt, tmp, 0.02 * peri, true);
-
-                  if (tmp.rows === 4 && area > maxArea) {
-                    maxArea = area;
-                    if (maxContour) maxContour.delete();
-                    maxContour = tmp.clone();
-                  }
-                  tmp.delete();
-                }
-              }
-
-              if (maxContour) {
-                // Order points: tl, tr, br, bl
-                // We need to convert Mat to array of points
-                const points = [];
-                for (let i = 0; i < 4; i++) {
-                  points.push({
-                    x: maxContour.intPtr(i, 0)[0],
-                    y: maxContour.intPtr(i, 0)[1]
-                  });
-                }
-
-                // Sort points
-                // Top-left has smallest sum, Bottom-right has largest sum
-                // Top-right has smallest diff, Bottom-left has largest diff
-                points.sort((a, b) => a.y - b.y); // Sort by Y first
-                // Top 2 are top points, Bottom 2 are bottom points
-                const topPoints = points.slice(0, 2).sort((a, b) => a.x - b.x);
-                const bottomPoints = points.slice(2, 4).sort((a, b) => a.x - b.x);
-
-                const tl = topPoints[0];
-                const tr = topPoints[1];
-                const bl = bottomPoints[0];
-                const br = bottomPoints[1];
-
-                // Calculate width and height of new image
-                const widthA = Math.sqrt(Math.pow(br.x - bl.x, 2) + Math.pow(br.y - bl.y, 2));
-                const widthB = Math.sqrt(Math.pow(tr.x - tl.x, 2) + Math.pow(tr.y - tl.y, 2));
-                const maxWidth = Math.max(widthA, widthB);
-
-                const heightA = Math.sqrt(Math.pow(tr.x - br.x, 2) + Math.pow(tr.y - br.y, 2));
-                const heightB = Math.sqrt(Math.pow(tl.x - bl.x, 2) + Math.pow(tl.y - bl.y, 2));
-                const maxHeight = Math.max(heightA, heightB);
-
-                // Perspective transform
-                let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
-                let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth, 0, maxWidth, maxHeight, 0, maxHeight]);
-
-                let M = cv.getPerspectiveTransform(srcTri, dstTri);
-                cv.warpPerspective(src, dst, M, new cv.Size(maxWidth, maxHeight));
-
-                // Update src to point to the warped image for next steps
-                src.delete();
-                src = dst.clone(); // dst is now our source
-
-                // Cleanup
-                srcTri.delete(); dstTri.delete(); M.delete();
-                gray.delete(); blurred.delete(); edges.delete();
-                contours.delete(); hierarchy.delete(); approx.delete();
-                if (maxContour) maxContour.delete();
-
-              } else {
-                // No contour found, cleanup
-                gray.delete(); blurred.delete(); edges.delete();
-                contours.delete(); hierarchy.delete(); approx.delete();
-              }
+              const dewarped = autoDeskewAndCrop(cv, src);
+              src.delete();
+              src = dewarped;
             } catch (e) {
-              console.error("Dewarp error", e);
+              console.error("Auto Dewarp failed", e);
             }
           }
 
-          // 2. Advanced Whitening (Adaptive Threshold)
-          if (config.useAdaptiveThreshold) {
+          // 2. Strong B/W Scan (forceful binarization for gray paper)
+          if (config.strongBinarize) {
             let gray = new cv.Mat();
             cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-            // Adaptive Threshold
-            // ADAPTIVE_THRESH_GAUSSIAN_C is usually better for text
-            // Block size 11, C = 2
-            cv.adaptiveThreshold(gray, dst, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 21, 10);
+            let bg = new cv.Mat();
+            cv.medianBlur(gray, bg, 21); // smooth background estimation
 
-            // Convert back to RGBA
-            cv.cvtColor(dst, dst, cv.COLOR_GRAY2RGBA);
+            let normalized = new cv.Mat();
+            cv.divide(gray, bg, normalized, 255, -1);
 
-            src.delete();
-            src = dst.clone();
-            gray.delete();
+            let clahe = new cv.Mat();
+            const claheObj = cv.createCLAHE(2.0, new cv.Size(8, 8));
+            claheObj.apply(normalized, clahe);
+
+            let bin = new cv.Mat();
+            cv.adaptiveThreshold(clahe, bin, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 35, 5);
+
+            // Optional: small morphology to clean dots
+            let k = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+            cv.morphologyEx(bin, bin, cv.MORPH_OPEN, k);
+            k.delete();
+
+            cv.cvtColor(bin, src, cv.COLOR_GRAY2RGBA);
+
+            // Cleanup
+            gray.delete(); bg.delete(); normalized.delete(); clahe.delete(); bin.delete(); claheObj.delete();
+
+            // Output immediately to avoid further processing
+            cv.imshow(canvas, src);
+            src.delete(); dst.delete();
+            const processedImg = new Image();
+            processedImg.onload = () => resolve(processedImg);
+            processedImg.src = canvas.toDataURL();
+            return;
           }
 
-          // 3. Apply Brightness/Contrast if still needed (on top of OpenCV result)
+          // 3. Advanced Whitening (Color Preserving)
+          if (config.useAdaptiveThreshold) {
+            // Convert to RGB (drop alpha for processing)
+            let rgb = new cv.Mat();
+            cv.cvtColor(src, rgb, cv.COLOR_RGBA2RGB);
+
+            // Split channels
+            let planes = new cv.MatVector();
+            cv.split(rgb, planes);
+
+            let resultPlanes = new cv.MatVector();
+
+            // Kernel size for morphological operations
+            // Needs to be large enough to cover text but smaller than page features
+            // 30-50 is usually good for document images
+            let kSize = new cv.Size(30, 30);
+            let kernel = cv.getStructuringElement(cv.MORPH_RECT, kSize);
+
+            for (let i = 0; i < planes.size(); ++i) {
+              let channel = planes.get(i);
+              let background = new cv.Mat();
+
+              // Estimate background using Morphological Closing (Dilation -> Erosion)
+              // This fills in the dark text with the surrounding bright background color
+              cv.morphologyEx(channel, background, cv.MORPH_CLOSE, kernel);
+
+              // Division Normalization: (Image / Background) * 255
+              // This flattens the illumination
+              let result = new cv.Mat();
+              cv.divide(channel, background, result, 255, -1);
+
+              // --- ENHANCEMENT: Levels Adjustment (Histogram Stretching) ---
+              // We want to force light grays to pure white and darken text slightly.
+              // Input range: [0, 255] -> Output range: [0, 255]
+              // But we map [blackPoint, whitePoint] -> [0, 255]
+
+              // Agressive whitening: Clip anything above 210 to 255 (Was 230)
+              // Contrast boost: Clip anything below 30 to 0 (Was 20)
+
+              const whitePoint = 210; // Aggressive White
+              const blackPoint = 30;  // Aggressive Black
+
+              const alpha = 255.0 / (whitePoint - blackPoint);
+              const beta = -blackPoint * alpha;
+
+              result.convertTo(result, -1, alpha, beta);
+
+              resultPlanes.push_back(result);
+
+              channel.delete();
+              background.delete();
+            }
+
+            // Merge back
+            cv.merge(resultPlanes, rgb);
+
+            // Convert back to RGBA
+            cv.cvtColor(rgb, dst, cv.COLOR_RGB2RGBA);
+
+            // Cleanup
+            src.delete();
+            src = dst.clone();
+
+            rgb.delete();
+            planes.delete();
+            resultPlanes.delete();
+            kernel.delete();
+          }
+
+          // 4. Apply Brightness/Contrast if still needed (on top of OpenCV result)
           // Note: Standard threshold is ignored if Adaptive is on, or we could apply it?
           // Usually Adaptive Threshold results in binary image, so brightness/contrast might not do much unless we do it BEFORE.
           // But let's stick to the flow. If Adaptive is OFF, we might still want standard processing.
@@ -468,6 +913,32 @@ const processStandard = (imageData: ImageData, config: ProcessingConfig, ctx: Ca
   const contrast = config.contrast;
   const targetColor = config.targetColor;
   const colorTolerance = config.colorTolerance || 20;
+
+  // Fallback strong binarize when OpenCV is unavailable
+  if (config.strongBinarize) {
+    let sum = 0, sumSq = 0, count = 0, min = 255, max = 0;
+    const grayVals = new Array(data.length / 4);
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+      const g = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      grayVals[j] = g;
+      sum += g; sumSq += g * g; count++;
+      if (g < min) min = g;
+      if (g > max) max = g;
+    }
+    const mean = sum / count;
+    const variance = sumSq / count - mean * mean;
+    const std = Math.sqrt(Math.max(variance, 0));
+    const thr = Math.min(max, Math.max(min, mean - 0.25 * std));
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+      const v = grayVals[j] > thr ? 255 : 0;
+      data[i] = data[i + 1] = data[i + 2] = v;
+    }
+    ctx.putImageData(imageData, 0, 0);
+    const processedImg = new Image();
+    processedImg.onload = () => resolve(processedImg);
+    processedImg.src = ctx.canvas.toDataURL();
+    return;
+  }
 
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
@@ -601,13 +1072,10 @@ const calculateOptimalGrid = (count: number, itemWidth: number, itemHeight: numb
 
 export const stitchImagesAndStamp = async (
   images: PdfPageImage[],
-  stampCanvas: HTMLCanvasElement | null,
   layoutMode: LayoutMode = 'vertical',
-  stampConfig: StampConfig,
   pagesPerGroup: number = 1,
   processingConfig?: ProcessingConfig,
-  orientation: PageOrientation = 'portrait',
-  pageConfig?: PageConfig
+  orientation: PageOrientation = 'portrait'
 ): Promise<string> => {
   if (images.length === 0) return '';
 
@@ -804,9 +1272,6 @@ export const stitchImagesAndStamp = async (
 
       // 4. Page Number Badge (Comic order)
       const badgeSize = 40;
-      const badgeX = imgX + imgData.width - badgeSize / 2;
-      const badgeY = imgY + imgData.height - badgeSize / 2;
-
       // Bottom Right inside the frame
       const numX = imgX + imgData.width - 30;
       const numY = imgY + imgData.height - 30;
@@ -824,64 +1289,12 @@ export const stitchImagesAndStamp = async (
     }
   }
 
-  // 4. Draw Stamp (if provided)
-  if (stampCanvas) {
-    const stampWidth = stampCanvas.width;
-    const stampHeight = stampCanvas.height;
 
-    // Calculate target size
-    const targetStampWidth = Math.min(canvasWidth * 0.2, 500);
-    const scaleRatio = targetStampWidth / stampWidth;
-    const targetStampHeight = stampHeight * scaleRatio;
-
-    // Determine Anchor Point (Bottom-Right Reference)
-    let referenceRight = canvasWidth;
-    let referenceBottom = canvasHeight;
-
-    if (layoutMode.startsWith('grid')) {
-      // In grid mode, anchor to the actual content bounds
-      const totalContentWidth = (cols * maxWidth) + ((cols - 1) * GUTTER_SIZE);
-      const totalContentHeight = (rows * maxHeight) + ((rows - 1) * GUTTER_SIZE);
-
-      const startX = (canvasWidth - totalContentWidth) / 2;
-      const startY = (canvasHeight - totalContentHeight) / 2;
-
-      referenceRight = startX + totalContentWidth;
-      referenceBottom = startY + totalContentHeight;
-    }
-
-    // Use user configured padding
-    const userPaddingX = stampConfig.paddingX ?? 50;
-    const userPaddingY = stampConfig.paddingY ?? 50;
-
-    const stampX = referenceRight - targetStampWidth - userPaddingX;
-    const stampY = referenceBottom - targetStampHeight - userPaddingY;
-
-    ctx.drawImage(stampCanvas, stampX, stampY, targetStampWidth, targetStampHeight);
-  }
-
-  // Draw Header
-  if (pageConfig?.headerText) {
-    ctx.save();
-    ctx.fillStyle = '#666666';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(pageConfig.headerText, canvasWidth / 2, 20);
-    ctx.restore();
-  }
-
-  // Draw Footer
-  if (pageConfig?.footerText) {
-    ctx.save();
-    ctx.fillStyle = '#666666';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(pageConfig.footerText, canvasWidth / 2, canvasHeight - 10);
-    ctx.restore();
-  }
 
   return canvas.toDataURL('image/jpeg', 0.9);
 };
+
+
 
 /**
  * Generate all grouped images with stamps
@@ -893,24 +1306,27 @@ export const stitchImagesAndStamp = async (
  */
 export const generateGroupedImages = async (
   images: PdfPageImage[],
-  stampCanvas: HTMLCanvasElement | null,
-  stampConfig: StampConfig,
-  pagesPerGroup: number = 1,
+  layoutMode: LayoutMode,
+  pagesPerGroup: number,
   processingConfig?: ProcessingConfig,
-  layoutMode: LayoutMode = 'grid',
-  orientation: PageOrientation = 'portrait',
-  pageConfig?: PageConfig
+  orientation: PageOrientation = 'portrait'
 ): Promise<string[]> => {
-  if (images.length === 0) return [];
-
-  const groupedImages: string[] = [];
-
-  // Process each group
+  const groups: PdfPageImage[][] = [];
   for (let i = 0; i < images.length; i += pagesPerGroup) {
-    const group = images.slice(i, i + pagesPerGroup);
-    const imageUrl = await stitchImagesAndStamp(group, stampCanvas, layoutMode, stampConfig, 1, processingConfig, orientation, pageConfig);
-    groupedImages.push(imageUrl);
+    groups.push(images.slice(i, i + pagesPerGroup));
   }
 
-  return groupedImages;
+  const results: string[] = [];
+  for (const group of groups) {
+    const url = await stitchImagesAndStamp(
+      group,
+      layoutMode,
+      pagesPerGroup,
+      processingConfig,
+      orientation
+    );
+    results.push(url);
+  }
+
+  return results;
 };

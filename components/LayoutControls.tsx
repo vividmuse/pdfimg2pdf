@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutMode, PageOrientation, PageConfig } from '../types';
+import { LayoutMode, PageOrientation } from '../types';
 import { LayoutList, Grid, FileText, LayoutTemplate, Smartphone, Monitor, Type } from 'lucide-react';
 import { useTranslation } from '../src/i18n/LanguageContext';
 
@@ -8,8 +8,6 @@ interface LayoutControlsProps {
   onChange: (mode: LayoutMode) => void;
   orientation: PageOrientation;
   onOrientationChange: (orientation: PageOrientation) => void;
-  pageConfig: PageConfig;
-  onPageConfigChange: (config: PageConfig) => void;
 }
 
 const LayoutControls: React.FC<LayoutControlsProps> = ({ currentMode, onChange, orientation, onOrientationChange, pageConfig, onPageConfigChange }) => {
@@ -134,47 +132,6 @@ const LayoutControls: React.FC<LayoutControlsProps> = ({ currentMode, onChange, 
           </div>
         </div>
       )}
-
-      {/* Header & Footer Inputs */}
-      <div className="mt-4 pt-4 border-t border-slate-100">
-        <label className="text-sm font-medium text-[#383838] mb-2 block flex items-center">
-          <Type className="w-4 h-4 mr-2" />
-          {t('layout.headerFooter')}
-        </label>
-        <div className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs text-slate-500">{t('layout.header')}</label>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  onPageConfigChange({ ...pageConfig, headerText: window.location.hostname });
-                }}
-                className="text-xs text-[#d97757] hover:text-[#b85637] font-medium"
-              >
-                {t('layout.useCurrentUrl')}
-              </button>
-            </div>
-            <input
-              type="text"
-              value={pageConfig.headerText}
-              onChange={(e) => onPageConfigChange({ ...pageConfig, headerText: e.target.value })}
-              placeholder="e.g. www.example.com"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d97757] focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">{t('layout.footer')}</label>
-            <input
-              type="text"
-              value={pageConfig.footerText}
-              onChange={(e) => onPageConfigChange({ ...pageConfig, footerText: e.target.value })}
-              placeholder="e.g. Page 1"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#d97757] focus:border-transparent"
-            />
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

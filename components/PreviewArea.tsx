@@ -1,145 +1,98 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ProcessingStatus, PdfPageImage, StampConfig, LayoutMode, ProcessingConfig, PageOrientation, PageConfig } from '../types';
+import { ProcessingStatus, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation } from '../types';
 import { stitchImagesAndStamp, generateGroupedImages } from '../services/pdfService';
 import { Download, Loader2, Printer, Eye, ZoomIn, ZoomOut } from 'lucide-react';
 import { useTranslation } from '../src/i18n/LanguageContext';
 
 interface PreviewAreaProps {
   pages: PdfPageImage[];
-  stampConfig: StampConfig;
   isProcessing: boolean;
   layoutMode: LayoutMode;
   pagesPerGroup: number;
-  showStampDesigner: boolean;
   processingConfig: ProcessingConfig;
   orientation: PageOrientation;
-  pageConfig: PageConfig;
 }
 
 const PreviewArea: React.FC<PreviewAreaProps> = ({
   pages,
-  stampConfig,
   layoutMode,
   pagesPerGroup,
   isProcessing,
-  showStampDesigner,
   processingConfig,
-  orientation,
-  pageConfig
+  orientation
 }) => {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [previewUrls, setPreviewUrls] = useState<string[]>([]);
   const [isStitching, setIsStitching] = useState(false);
 
-  // Helper to draw the stamp on a standalone canvas
-  const createStampCanvas = (): HTMLCanvasElement => {
-    const size = 300; // Resolution for stamp rendering
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return canvas;
-
-    // Clear
-    ctx.clearRect(0, 0, size, size);
-
-    const { text, subText, color, shape, opacity } = stampConfig;
-
-    // Apply opacity
-    ctx.globalAlpha = opacity;
-    ctx.strokeStyle = color;
-    ctx.fillStyle = color;
-    ctx.lineWidth = 8;
-
-    const center = size / 2;
-    const radius = size / 2 - 10;
-    const boxSize = size - 20;
-
-    // Draw Border
-    ctx.beginPath();
-    if (shape === 'circle') {
-      ctx.arc(center, center, radius, 0, Math.PI * 2);
-    } else {
-      ctx.roundRect(10, 10, boxSize, boxSize, 20);
-    }
-    ctx.stroke();
-
-    // Inner Border (thinner)
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    if (shape === 'circle') {
-      ctx.arc(center, center, radius - 15, 0, Math.PI * 2);
-    } else {
-      ctx.strokeRect(25, 25, boxSize - 30, boxSize - 30);
-    }
-    ctx.stroke();
-
-    // Text
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Main Text
-    ctx.font = 'bold 60px "Noto Serif SC", serif';
-    // Basic text wrapping for square stamps
-    if (shape === 'square' && text.length > 4) {
-      // split into two lines
-      const mid = Math.ceil(text.length / 2);
-      const l1 = text.slice(0, mid);
-      const l2 = text.slice(mid);
-      ctx.fillText(l1, center, center - 20);
-      ctx.fillText(l2, center, center + 40);
-    } else {
-      ctx.fillText(text, center, subText ? center - 15 : center);
-    }
-
-    // Sub Text
-    if (subText) {
-      ctx.font = '500 24px "Inter", sans-serif';
-      ctx.fillText(subText, center, center + 65);
-    }
-
-    // Grunge effect (simple noise)
-    ctx.globalCompositeOperation = 'destination-out';
-    for (let i = 0; i < 500; i++) {
-      const x = Math.random() * size;
-      const y = Math.random() * size;
-      const r = Math.random() * 2;
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    return canvas;
-  };
-
-  // Re-generate the stitched image whenever pages, stamp config, layout mode, or pages per group changes
+  // Generate preview image
   useEffect(() => {
-    if (pages.length === 0) return;
-
-    const generate = async () => {
-      setIsStitching(true);
-      // Short delay to allow UI to update to loading state
-      await new Promise(r => setTimeout(r, 50));
-
-      // Only create stamp canvas if stamp designer is enabled
-      const stampCanvas = showStampDesigner ? createStampCanvas() : null;
-
-      if (pagesPerGroup > 0 && pagesPerGroup < pages.length) {
-        // Generate all grouped images
-        const urls = await generateGroupedImages(pages, stampCanvas, stampConfig, pagesPerGroup, processingConfig, layoutMode, orientation, pageConfig);
-        setPreviewUrls(urls);
-      } else {
-        // Generate single image for other layouts
-        const url = await stitchImagesAndStamp(pages, stampCanvas, layoutMode, stampConfig, 1, processingConfig, orientation, pageConfig);
-        setPreviewUrls([url]);
+    const generatePreview = async () => {
+      if (pages.length === 0) {
+        setPreviewUrls([]);
+        return;
       }
 
-      setIsStitching(false);
+      setIsStitching(true);
+      try {
+        // If grouped layout, generate all group images
+        if (pagesPerGroup > 1) {
+          const urls = await generateGroupedImages(
+            pages,
+            layoutMode,
+            pagesPerGroup,
+            processingConfig,
+            orientation
+          );
+          setPreviewUrls(urls);
+        } else {
+          // Single page or vertical layout - generate one long image or single images
+          // For vertical layout, we stitch everything into one image
+          // For grid layout with pagesPerGroup=1, we also stitch everything into one image?
+          // Wait, if pagesPerGroup=1, it means "1 page per group" -> which means we should generate N images?
+          // But here we are calling stitchImagesAndStamp which returns ONE image.
+
+          // Let's stick to the previous behavior:
+          // If pagesPerGroup > 1, we use generateGroupedImages.
+          // If pagesPerGroup === 1, we use stitchImagesAndStamp to make ONE image of ALL pages?
+          // OR does pagesPerGroup=1 mean "Keep pages separate"?
+          // In the UI, "Group Images" usually implies merging.
+          // If pagesPerGroup=1, it might mean "Don't merge".
+          // BUT, `stitchImagesAndStamp` is designed to stitch.
+
+          // Let's look at how it was before.
+          // It used `stitchImagesAndStamp` directly.
+          // And it passed `stampConfig` and `pageConfig`.
+
+          // I will replace `stitchImagesAndStamp` with `generateGroupedImages` for consistency if possible,
+          // OR just update `stitchImagesAndStamp` arguments.
+          // Since `stitchImagesAndStamp` returns a single string, it implies a single output image.
+          // If `layoutMode` is vertical, we want one long image.
+
+          // Let's just update the call to `stitchImagesAndStamp` for now to match the signature I will update in pdfService.
+          // I will pass `undefined` or `null` for the removed arguments.
+
+          const url = await stitchImagesAndStamp(
+            pages,
+            layoutMode,
+            pagesPerGroup,
+            processingConfig,
+            orientation
+          );
+          setPreviewUrls([url]);
+        }
+      } catch (error) {
+        console.error('Error generating preview:', error);
+      } finally {
+        setIsStitching(false);
+      }
     };
 
-    generate();
-  }, [pages, stampConfig, layoutMode, pagesPerGroup, showStampDesigner, processingConfig, orientation, pageConfig]);
+    // Debounce preview generation
+    const timer = setTimeout(generatePreview, 500);
+    return () => clearTimeout(timer);
+  }, [pages, layoutMode, pagesPerGroup, processingConfig, orientation]);
 
 
   const handleDownload = (url?: string, index?: number) => {

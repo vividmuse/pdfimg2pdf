@@ -169,50 +169,76 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
 
   const handlePrint = (url?: string) => {
     const urlsToPrint = url ? [url] : previewUrls;
-    if (urlsToPrint.length === 0) return;
-
+    // Generate HTML with properly styled images
     const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      const imagesHtml = urlsToPrint.map(src => `<img src="${src}" />`).join('');
+    if (!printWindow) return;
 
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>${t('print.title')}</title>
-            <style>
+    const imagesToPrint = url ? [url] : previewUrls;
+    const imagesHtml = imagesToPrint
+      .map((imgUrl, index) => `
+        <div style="
+          page-break-after: ${index < imagesToPrint.length - 1 ? 'always' : 'avoid'};
+          page-break-inside: avoid;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 100vh;
+          padding: 0;
+          margin: 0;
+        ">
+          <img 
+            src="${imgUrl}" 
+            style="
+              max-width: 100%;
+              max-height: 100vh;
+              object-fit: contain;
+              display: block;
+            "
+          />
+        </div>
+      `)
+      .join('');
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Print</title>
+          <style>
+            @page {
+              margin: 0;
+              size: auto;
+            }
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+            }
+            @media print {
               body { margin: 0; }
-              img { 
-                max-width: 100%; 
-                width: 100%; 
-                height: auto; 
-                display: block; 
-                page-break-after: always; /* Force new page for each image */
-              }
-              img:last-child {
-                page-break-after: auto;
-              }
-              @media print {
-                body { margin: 0; }
-                /* Ensure background graphics are printed if needed, though usually not for images */
-              }
-            </style>
-          </head>
-          <body>
-            ${imagesHtml}
-            <script>
-              // Wait for all images to load before printing
-              window.onload = () => {
-                setTimeout(() => {
-                  window.print();
-                  window.close();
-                }, 500); // Small delay to ensure rendering
-              };
-            </script>
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
-    }
+              img { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          ${imagesHtml}
+        </body>
+      </html>
+    `);
+
+    printWindow.document.close();
+
+    // Wait for images to load before printing
+    printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+      }, 500);
+    };
   };
 
   if (isProcessing) {
@@ -316,11 +342,13 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
           </div>
         ) : (
           previewUrls.length > 0 && (
-            <img
-              src={previewUrls[0]}
-              alt={t('preview.stitchedPdfAlt')}
-              className="shadow-2xl max-w-full h-auto object-contain bg-white"
-            />
+            <div className="w-full flex justify-center items-center">
+              <img
+                src={previewUrls[0]}
+                alt={t('preview.altText')}
+                className="shadow-2xl max-w-full h-auto object-contain bg-white mx-auto rounded-lg"
+              />
+            </div>
           )
         )}
       </div>

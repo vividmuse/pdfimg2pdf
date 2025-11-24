@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
-import { ProcessingStatus, StampConfig, PdfPageImage, LayoutMode } from './types';
+import { ProcessingStatus, StampConfig, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation, PageConfig } from './types';
 import UploadZone from './components/UploadZone';
 import StampControls from './components/StampControls';
 import LayoutControls from './components/LayoutControls';
+import ProcessingControls from './components/ProcessingControls';
 import GroupControls from './components/GroupControls';
 import PreviewArea from './components/PreviewArea';
+import ImageSelector from './components/ImageSelector';
 import { convertPdfToImages } from './services/pdfService';
 import { FileText, ScrollText, Github, User } from 'lucide-react';
+import { useTranslation } from './src/i18n/LanguageContext';
+import LanguageSwitcher from './src/components/LanguageSwitcher';
 
 // Get today's date in YYYY-MM-DD format
 const getTodayDate = () => {
@@ -29,26 +33,86 @@ const DEFAULT_STAMP: StampConfig = {
 };
 
 const App: React.FC = () => {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<ProcessingStatus>(ProcessingStatus.IDLE);
   const [pdfPages, setPdfPages] = useState<PdfPageImage[]>([]);
   const [stampConfig, setStampConfig] = useState<StampConfig>(DEFAULT_STAMP);
   const [fileName, setFileName] = useState<string>('');
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('vertical');
   const [pagesPerGroup, setPagesPerGroup] = useState<number>(1);
-  const [showStampDesigner, setShowStampDesigner] = useState<boolean>(true);
+  const [showStampDesigner, setShowStampDesigner] = useState(false);
+  const [processingConfig, setProcessingConfig] = useState<ProcessingConfig>({
+    threshold: 0,
+    brightness: 0,
+    contrast: 0
+  });
+  const [orientation, setOrientation] = useState<PageOrientation>('portrait');
+  const [pageConfig, setPageConfig] = useState<PageConfig>({
+    headerText: window.location.hostname,
+    footerText: ''
+  });
 
-  const handleFileSelect = async (file: File) => {
+  const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'render') => {
     try {
       setStatus(ProcessingStatus.PROCESSING_PDF);
-      setFileName(file.name);
-      const images = await convertPdfToImages(file);
-      setPdfPages(images);
+      setFileName(files.length === 1 ? files[0].name : `${files.length} files`);
+
+      // Process all files and combine results
+      const allImages: PdfPageImage[] = [];
+      for (const file of files) {
+        const images = await convertPdfToImages(file, mode);
+        allImages.push(...images);
+      }
+
+      setPdfPages(allImages);
       setStatus(ProcessingStatus.READY);
     } catch (error) {
       console.error(error);
       setStatus(ProcessingStatus.ERROR);
-      alert("Failed to process PDF. Please try a simpler file.");
+      alert(t('app.error.process'));
     }
+  };
+
+  const handleLayoutChange = (mode: LayoutMode) => {
+    setLayoutMode(mode);
+    // If switching to A4/A3 and grouping is "All" (0), default to 1 page per sheet
+    // This prevents the "One giant image on A4" issue which is usually not what users want
+    if ((mode === 'grid-a4' || mode === 'grid-a3') && pagesPerGroup === 0) {
+      setPagesPerGroup(1);
+    }
+  };
+
+  const handleRemovePage = (index: number) => {
+    setPdfPages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleKeepOdd = () => {
+    setPdfPages(prev => prev.filter((_, i) => i % 2 === 0)); // 0-indexed, so 0, 2, 4 are "1st, 3rd, 5th"
+  };
+
+  const handleKeepEven = () => {
+    setPdfPages(prev => prev.filter((_, i) => i % 2 !== 0));
+  };
+
+  const handleAutoClean = () => {
+    if (pdfPages.length === 0) return;
+
+    // Calculate max area to identify "main" pages
+    const maxArea = Math.max(...pdfPages.map(img => img.width * img.height));
+
+    // Filter out images that are significantly smaller than the main pages (e.g., < 20% of max area)
+    // This effectively removes small watermarks, QR codes, icons, etc.
+    const thresholdRatio = 0.2;
+
+    setPdfPages(prev => prev.filter(img => {
+      const area = img.width * img.height;
+      return area > (maxArea * thresholdRatio);
+    }));
+  };
+
+  const handleClear = () => {
+    setPdfPages([]);
+    setStatus(ProcessingStatus.IDLE);
   };
 
   return (
@@ -59,11 +123,12 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="bg-[#d97757] p-2 rounded-lg">
-               <ScrollText className="w-6 h-6 text-white" />
+              <ScrollText className="w-6 h-6 text-white" />
             </div>
-            <h1 className="text-xl font-bold text-[#383838] tracking-tight font-['Merriweather']">PDF Stitcher <span className="text-[#9e9e9e] font-light">&</span> Seal</h1>
+            <h1 className="text-xl font-bold text-[#383838] tracking-tight font-['Merriweather']">{t('app.title')} <span className="text-[#9e9e9e] font-light">{t('app.subtitle')}</span></h1>
           </div>
           <div className="flex items-center space-x-4">
+            <LanguageSwitcher />
             <div className="relative group">
               <a
                 href="https://github.com/cclank/NLM2Img"
@@ -75,7 +140,7 @@ const App: React.FC = () => {
                 <Github className="w-5 h-5" />
               </a>
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-xs text-white bg-[#383838] rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
-                GitHub Repository
+                {t('app.github')}
               </div>
             </div>
             <div className="relative group">
@@ -89,11 +154,11 @@ const App: React.FC = () => {
                 <User className="w-5 h-5" />
               </a>
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-xs text-white bg-[#383838] rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50">
-                Author Profile
+                {t('app.author')}
               </div>
             </div>
             <div className="text-sm font-medium text-[#6b6b6b] hidden sm:block">
-               Privacy First: Processing happens in your browser
+              {t('app.privacy')}
             </div>
           </div>
         </div>
@@ -101,74 +166,80 @@ const App: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
+
         {/* Upload Section (Visible if no file) */}
         {status === ProcessingStatus.IDLE && (
-           <div className="max-w-2xl mx-auto mt-12">
-              <div className="text-center mb-10">
-                 <h2 className="text-3xl font-bold text-slate-900 mb-4">Combine Pages & Add Your Official Seal</h2>
-                 <p className="text-lg text-slate-600">Turn multi-page PDFs into a single continuous image and apply a custom digital stamp in seconds.</p>
-              </div>
-              <UploadZone onFileSelect={handleFileSelect} />
-           </div>
+          <div className="max-w-2xl mx-auto mt-12">
+            <div className="text-center mb-10">
+              <h2 className="text-3xl font-bold text-slate-900 mb-4">{t('app.hero.title')}</h2>
+              <p className="text-lg text-slate-600">{t('app.hero.subtitle')}</p>
+            </div>
+            <UploadZone onFileSelect={handleFileSelect} />
+          </div>
         )}
 
         {/* Workspace (Visible if file loaded or processing) */}
         {(status !== ProcessingStatus.IDLE) && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
+
             {/* Sidebar Controls */}
             <div className="lg:col-span-4 space-y-6">
               <div className="bg-[#ffffff] p-4 rounded-xl border border-[#e0e0e0] flex items-center justify-between shadow-sm">
-                 <div className="flex items-center space-x-3 overflow-hidden">
-                    <FileText className="w-5 h-5 text-[#d97757] shrink-0" />
-                    <span className="text-sm font-medium text-[#383838] truncate" title={fileName}>{fileName}</span>
-                 </div>
-                 <button
-                   onClick={() => {
-                     setStatus(ProcessingStatus.IDLE);
-                     setPdfPages([]);
-                   }}
-                   className="text-xs text-[#d15648] hover:text-[#d15648] font-medium px-2 py-1 rounded hover:bg-[#fcf7f1] transition-colors"
-                 >
-                   Change
-                 </button>
+                <div className="flex items-center space-x-3 overflow-hidden">
+                  <FileText className="w-5 h-5 text-[#d97757] shrink-0" />
+                  <span className="text-sm font-medium text-[#383838] truncate" title={fileName}>{fileName}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setStatus(ProcessingStatus.IDLE);
+                    setPdfPages([]);
+                  }}
+                  className="text-xs text-[#d15648] hover:text-[#d15648] font-medium px-2 py-1 rounded hover:bg-[#fcf7f1] transition-colors"
+                >
+                  {t('app.changeFile')}
+                </button>
               </div>
 
               <LayoutControls
                 currentMode={layoutMode}
-                onChange={setLayoutMode}
+                onChange={handleLayoutChange}
+                orientation={orientation}
+                onOrientationChange={setOrientation}
+                pageConfig={pageConfig}
+                onPageConfigChange={setPageConfig}
+              />
+
+              <ProcessingControls
+                config={processingConfig}
+                onChange={setProcessingConfig}
+                sampleImage={pdfPages[0]}
               />
 
               {/* Stamp Designer Toggle - Place after Layout Controls for consistent flow */}
               <div className="bg-[#ffffff] p-4 rounded-xl border border-[#e0e0e0] shadow-sm">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-[#383838]">Stamp Designer</span>
+                  <span className="text-sm font-medium text-[#383838]">{t('app.stampDesigner')}</span>
                   <button
                     onClick={() => setShowStampDesigner(!showStampDesigner)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
-                      showStampDesigner ? 'bg-[#d97757]' : 'bg-[#e0e0e0]'
-                    }`}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${showStampDesigner ? 'bg-[#d97757]' : 'bg-[#e0e0e0]'
+                      }`}
                   >
                     <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        showStampDesigner ? 'translate-x-6' : 'translate-x-1'
-                      }`}
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showStampDesigner ? 'translate-x-6' : 'translate-x-1'
+                        }`}
                     />
                   </button>
                 </div>
                 <p className="text-xs text-[#6b6b6b] mt-2">
-                  {showStampDesigner ? 'Enabled - Add custom stamps to your documents' : 'Disabled - Process PDFs without stamps'}
+                  {showStampDesigner ? t('app.stampDesigner.enabled') : t('app.stampDesigner.disabled')}
                 </p>
               </div>
 
-              {/* Show Group Controls only when grouped layout is selected */}
-              {layoutMode === 'grouped' && (
-                <GroupControls
-                  totalPages={pdfPages.length}
-                  onPageGroupChange={setPagesPerGroup}
-                />
-              )}
+              {/* Group Controls - Always visible now to allow merging pages */}
+              <GroupControls
+                totalPages={pdfPages.length}
+                onPageGroupChange={setPagesPerGroup}
+              />
 
               {showStampDesigner && (
                 <StampControls
@@ -180,6 +251,14 @@ const App: React.FC = () => {
 
             {/* Preview Area */}
             <div className="lg:col-span-8">
+              <ImageSelector
+                images={pdfPages}
+                onRemove={handleRemovePage}
+                onKeepOdd={handleKeepOdd}
+                onKeepEven={handleKeepEven}
+                onAutoClean={handleAutoClean}
+                onClear={handleClear}
+              />
               <PreviewArea
                 pages={pdfPages}
                 stampConfig={stampConfig}
@@ -187,6 +266,9 @@ const App: React.FC = () => {
                 pagesPerGroup={pagesPerGroup}
                 isProcessing={status === ProcessingStatus.PROCESSING_PDF}
                 showStampDesigner={showStampDesigner}
+                processingConfig={processingConfig}
+                orientation={orientation}
+                pageConfig={pageConfig}
               />
             </div>
           </div>

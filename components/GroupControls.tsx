@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { FileDigit } from 'lucide-react';
+import { Layers, Info } from 'lucide-react';
+import { useTranslation } from '../src/i18n/LanguageContext';
 
 interface GroupControlsProps {
   totalPages: number;
@@ -7,6 +8,7 @@ interface GroupControlsProps {
 }
 
 const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupChange }) => {
+  const { t } = useTranslation();
   const [pagesPerGroup, setPagesPerGroup] = useState<number>(1);
   const [inputValue, setInputValue] = useState<string>('1');
 
@@ -58,10 +60,15 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
 
   return (
     <div className="bg-[#ffffff] rounded-xl shadow-sm border border-[#e0e0e0] p-6 mb-6">
-      <h2 className="text-lg font-bold text-[#383838] mb-4 flex items-center font-['Merriweather']">
-        <FileDigit className="w-5 h-5 mr-2 text-[#d97757]" />
-        Group Pages
-      </h2>
+      <div className="flex items-center mb-2">
+        <div className="bg-[#fcf7f1] p-2 rounded-lg mr-3">
+          <Layers className="w-5 h-5 text-[#d97757]" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-[#383838] font-['Merriweather']">{t('group.title')}</h2>
+          <p className="text-xs text-[#6b6b6b]">{t('group.desc')}</p>
+        </div>
+      </div>
 
       <div className="space-y-4">
         <div>

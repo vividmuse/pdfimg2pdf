@@ -7,7 +7,21 @@ export enum ProcessingStatus {
   ERROR = 'ERROR'
 }
 
-export type LayoutMode = 'vertical' | 'grid' | 'grid-a4' | 'grouped';
+export type LayoutMode = 'vertical' | 'grid' | 'grid-a4' | 'grid-a3';
+export type PageOrientation = 'portrait' | 'landscape';
+
+export interface PageConfig {
+  headerText: string;
+  footerText: string;
+}
+
+export interface ProcessingConfig {
+  threshold: number; // 0-255, for white background
+  brightness: number; // -100 to 100
+  contrast: number; // -100 to 100
+  targetColor?: { r: number; g: number; b: number }; // Color to remove
+  colorTolerance?: number; // 0-100, tolerance for color matching
+}
 
 export interface StampConfig {
   text: string;

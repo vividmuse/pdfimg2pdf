@@ -660,7 +660,7 @@ const autoDeskewAndCrop = (cv: any, src: any): any => {
     const areaRatio = (rect.size.width * rect.size.height) / totalArea;
 
     // Require decent coverage and portrait-ish shape to avoid warping a narrow inner table
-  if (areaRatio > 0.35 && ratio > 1.05 && ratio < 2.8) {
+    if (areaRatio > 0.35 && ratio > 1.05 && ratio < 2.8) {
       // Pre-deskew global angle before perspective
       const tmpGray = new cv.Mat();
       cv.cvtColor(padded, tmpGray, cv.COLOR_RGBA2GRAY);
@@ -668,14 +668,28 @@ const autoDeskewAndCrop = (cv: any, src: any): any => {
       cv.threshold(tmpGray, tmpBin, 0, 255, cv.THRESH_BINARY_INV + cv.THRESH_OTSU);
       const angle = detectDominantAngle(cv, tmpBin);
       let deskewed = padded.clone();
+      let transformedCorners = corners;
       if (Math.abs(angle) > 0.3) {
-        const Mrot = cv.getRotationMatrix2D(new cv.Point(padded.cols / 2, padded.rows / 2), angle, 1);
+        const center = new cv.Point(padded.cols / 2, padded.rows / 2);
+        const Mrot = cv.getRotationMatrix2D(center, angle, 1);
         cv.warpAffine(padded, deskewed, Mrot, new cv.Size(padded.cols, padded.rows), cv.INTER_CUBIC, cv.BORDER_REPLICATE);
+
+        // Rotate corner points accordingly
+        transformedCorners = corners.map(pt => {
+          const x = pt.x - center.x;
+          const y = pt.y - center.y;
+          const rad = angle * Math.PI / 180;
+          const cos = Math.cos(rad);
+          const sin = Math.sin(rad);
+          const rx = x * cos - y * sin + center.x;
+          const ry = x * sin + y * cos + center.y;
+          return { x: rx, y: ry };
+        });
         Mrot.delete();
       }
       tmpGray.delete(); tmpBin.delete();
 
-      warped = warpWithPerspective(cv, deskewed, corners);
+      warped = warpWithPerspective(cv, deskewed, transformedCorners);
       deskewed.delete();
     }
   } catch (e) {

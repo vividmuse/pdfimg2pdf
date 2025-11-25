@@ -182,8 +182,12 @@ export async function createScanOrder(
             result_msg: JSON.stringify(resultMsg),
         });
 
-        // 调用订单创建接口（使用代理）
-        const response = await fetch('/api/order/add', {
+        // 调用订单创建接口
+        const orderEndpoint = import.meta.env.DEV
+            ? '/api/order/add'
+            : 'https://p.xiexinbao.com/yhl_order/add';
+
+        const response = await fetch(orderEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
@@ -236,11 +240,13 @@ export async function pollOrderStatus(
                 const progress = Math.min(95, (attempts / SCAN_CONFIG.maxPollAttempts) * 100);
                 onProgress?.(progress);
 
-                // 查询订单状态（使用代理）
-                const statusUrl = `/api/order-status/item?id=${orderId}`;
+                // 查询订单状态
+                const statusEndpoint = import.meta.env.DEV
+                    ? `/api/order-status/item?id=${orderId}`
+                    : `https://www.xiexinbao.com/yhl_order/item?id=${orderId}`;
 
-                const response = await fetch(statusUrl, {
-                    method: 'POST',  // 改为POST
+                const response = await fetch(statusEndpoint, {
+                    method: 'POST',
                     headers: {
                         'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
                     },

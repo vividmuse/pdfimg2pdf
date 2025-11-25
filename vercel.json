@@ -6,6 +6,18 @@
     "framework": "vite",
     "rewrites": [
         {
+            "source": "/api/oss/:path*",
+            "destination": "https://www.xiexinbao.com/oss_hz/:path*"
+        },
+        {
+            "source": "/api/order-status/:path*",
+            "destination": "https://www.xiexinbao.com/yhl_order/:path*"
+        },
+        {
+            "source": "/api/order/:path*",
+            "destination": "https://p.xiexinbao.com/yhl_order/:path*"
+        },
+        {
             "source": "/(.*)",
             "destination": "/index.html"
         }

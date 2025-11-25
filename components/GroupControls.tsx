@@ -73,7 +73,7 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-[#383838] mb-2">
-            Pages per group
+            {t('group.pagesPerGroup')}
           </label>
           <div className="flex items-center space-x-3">
             <input
@@ -119,7 +119,7 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
 
           {/* Quick preset buttons */}
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs text-slate-500 mr-1">Quick:</span>
+            <span className="text-xs text-slate-500 mr-1">{t('group.quick')}</span>
             {[2, 3, 4].map((num) => (
               <button
                 key={num}
@@ -131,8 +131,8 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
                 }}
                 disabled={num > totalPages}
                 className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${pagesPerGroup === num
-                    ? 'bg-[#d97757] text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  ? 'bg-[#d97757] text-white'
+                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                   } disabled:opacity-50 disabled:cursor-not-allowed`}
               >
                 {num}
@@ -143,10 +143,9 @@ const GroupControls: React.FC<GroupControlsProps> = ({ totalPages, onPageGroupCh
 
         <div className="text-sm text-[#6b6b6b] bg-[#fcf7f1] p-3 rounded-lg">
           <p>
-            <span className="font-medium">{totalPages}</span> pages will be grouped into{' '}
-            <span className="font-medium">{groupCount}</span> image{groupCount !== 1 ? 's' : ''}
+            <span className="font-medium">{totalPages}</span> {t(`group.${groupCount === 1 ? 'resultText' : 'resultTextPlural'}`, { total: totalPages, count: groupCount })}
             {pagesPerGroup > 1 && (
-              <span> (with {pagesPerGroup} page{pagesPerGroup !== 1 ? 's' : ''} per group)</span>
+              <span> ({t(`group.${pagesPerGroup === 1 ? 'withPages' : 'withPagesPlural'}`, { count: pagesPerGroup })})</span>
             )}
           </p>
         </div>

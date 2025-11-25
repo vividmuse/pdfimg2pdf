@@ -38,7 +38,7 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
                     className="text-xs text-slate-600 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors"
                     title="重置所有处理参数"
                 >
-                    还原
+                    {t('processing.reset')}
                 </button>
             </div>
 
@@ -172,7 +172,7 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-[#383838] flex items-center cursor-pointer">
                         <span className="mr-2">📄</span>
-                        文档增强
+                        {t('processing.docEnhance')}
                     </label>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input
@@ -185,13 +185,13 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
                     </label>
                 </div>
                 <div className="text-xs text-slate-500 -mt-1 ml-7">
-                    字体更清晰 + 背景更白
+                    {t('processing.docEnhance.desc')}
                 </div>
 
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-[#383838] flex items-center cursor-pointer">
                         <span className="mr-2">🖨️</span>
-                        Strong B/W Scan
+                        {t('processing.strongBW')}
                     </label>
                     <label className="relative inline-flex items-center cursor-pointer">
                         <input

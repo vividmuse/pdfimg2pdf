@@ -11,7 +11,8 @@ interface PreviewAreaProps {
   pagesPerGroup: number;
   processingConfig: ProcessingConfig;
   orientation: PageOrientation;
-  onPreviewGenerated?: (blobs: Blob[]) => void;
+  onPreviewGenerated?: (blobs: Blob[]) => void;  // 预览用（可能压缩）
+  onUploadBlobsGenerated?: (blobs: Blob[]) => void;  // 上传用（高质量）
 }
 
 const PreviewArea: React.FC<PreviewAreaProps> = ({
@@ -21,7 +22,8 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
   isProcessing,
   processingConfig,
   orientation,
-  onPreviewGenerated
+  onPreviewGenerated,
+  onUploadBlobsGenerated  // 新增
 }) => {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -34,6 +36,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
       if (pages.length === 0) {
         setPreviewUrls([]);
         onPreviewGenerated?.([]);
+        onUploadBlobsGenerated?.([]);
         return;
       }
 
@@ -87,13 +90,39 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
         }
         setPreviewUrls(urls);
 
-        // Convert URLs to Blobs for the parent component
+        // Convert URLs to Blobs for preview (使用当前质量，0.9)
         if (onPreviewGenerated) {
           const blobs = await Promise.all(urls.map(async (url) => {
             const res = await fetch(url);
             return await res.blob();
           }));
           onPreviewGenerated(blobs);
+        }
+
+        // 生成高质量版本用于上传 (0.95质量)
+        if (onUploadBlobsGenerated) {
+          const highQualityBlobs = await Promise.all(urls.map(async (url) => {
+            // 重新创建canvas并以更高质量导出
+            const img = new Image();
+            await new Promise((resolve) => {
+              img.onload = resolve;
+              img.src = url;
+            });
+
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return new Blob();
+
+            ctx.drawImage(img, 0, 0);
+            return await new Promise<Blob>((resolve) => {
+              canvas.toBlob((blob) => {
+                resolve(blob || new Blob());
+              }, 'image/jpeg', 0.95);  // 高质量
+            });
+          }));
+          onUploadBlobsGenerated(highQualityBlobs);
         }
       } catch (error) {
         console.error('Error generating preview:', error);
@@ -105,7 +134,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
     // Debounce preview generation
     const timer = setTimeout(generatePreview, 500);
     return () => clearTimeout(timer);
-  }, [pages, layoutMode, pagesPerGroup, processingConfig, orientation, onPreviewGenerated]);
+  }, [pages, layoutMode, pagesPerGroup, processingConfig, orientation, onPreviewGenerated, onUploadBlobsGenerated]);
 
 
   const handleDownload = (url?: string, index?: number) => {

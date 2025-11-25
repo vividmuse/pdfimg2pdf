@@ -27,7 +27,7 @@ const App: React.FC = () => {
   });
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
   const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]);
-  const [originalBlobs, setOriginalBlobs] = useState<Blob[]>([]);  // 存储原始图片
+  const [uploadBlobs, setUploadBlobs] = useState<Blob[]>([]);  // 高质量处理后图片用于上传
 
   const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'render') => {
     try {
@@ -42,17 +42,8 @@ const App: React.FC = () => {
       }
 
       setPdfPages(allImages);
-
-      // 提取原始图片Blob（从base64 data URL）
-      const originals = await Promise.all(
-        allImages.map(async (page) => {
-          const res = await fetch(page.blob);
-          return await res.blob();
-        })
-      );
-      setOriginalBlobs(originals);
-
       setStatus(ProcessingStatus.READY);
+      // uploadBlobs会在PreviewArea的onUploadBlobsGenerated中设置
     } catch (error) {
       console.error(error);
       setStatus(ProcessingStatus.ERROR);
@@ -71,17 +62,15 @@ const App: React.FC = () => {
 
   const handleRemovePage = (index: number) => {
     setPdfPages(prev => prev.filter((_, i) => i !== index));
-    setOriginalBlobs(prev => prev.filter((_, i) => i !== index));
+    // uploadBlobs会由PreviewArea自动重新生成
   };
 
   const handleKeepOdd = () => {
-    setPdfPages(prev => prev.filter((_, i) => i % 2 === 0)); // 0-indexed, so 0, 2, 4 are "1st, 3rd, 5th"
-    setOriginalBlobs(prev => prev.filter((_, i) => i % 2 === 0));
+    setPdfPages(prev => prev.filter((_, i) => i % 2 === 0));
   };
 
   const handleKeepEven = () => {
     setPdfPages(prev => prev.filter((_, i) => i % 2 !== 0));
-    setOriginalBlobs(prev => prev.filter((_, i) => i % 2 !== 0));
   };
 
   const handleAutoClean = () => {
@@ -94,21 +83,15 @@ const App: React.FC = () => {
     // This effectively removes small watermarks, QR codes, icons, etc.
     const thresholdRatio = 0.2;
 
-    const keptIndices: number[] = [];
     setPdfPages(prev => prev.filter((img, index) => {
       const area = img.width * img.height;
-      const keep = area > (maxArea * thresholdRatio);
-      if (keep) keptIndices.push(index);
-      return keep;
+      return area > (maxArea * thresholdRatio);
     }));
-    setOriginalBlobs(prev => prev.filter((_, index) => keptIndices.includes(index)));
   };
 
   const handleClear = () => {
     setPdfPages([]);
-    setOriginalBlobs([]);
     setStatus(ProcessingStatus.IDLE);
-    // Reset processing config to default values
     setProcessingConfig({
       threshold: 0,
       brightness: 0,
@@ -241,12 +224,13 @@ const App: React.FC = () => {
                 processingConfig={processingConfig}
                 orientation={orientation}
                 onPreviewGenerated={setPreviewBlobs}
+                onUploadBlobsGenerated={setUploadBlobs}  // 接收高质量上传图片
               />
 
-              {/* Scan Service Panel - 使用原始图片而非预览图 */}
+              {/* Scan Service Panel - 使用高质量处理后图片 */}
               {pdfPages.length > 0 && (
                 <ScanServicePanel
-                  previewImages={originalBlobs}
+                  previewImages={uploadBlobs}  // 使用高质量Blob
                   onScanComplete={async (pdfUrl: string) => {
                     try {
                       console.log('Loading scanned PDF from:', pdfUrl);
@@ -261,15 +245,6 @@ const App: React.FC = () => {
                       const images = await convertPdfToImages(file, 'render');
                       setPdfPages(images);
                       setFileName('scanned.pdf');
-
-                      // 同时更新原始图片
-                      const newOriginals = await Promise.all(
-                        images.map(async (page) => {
-                          const res = await fetch(page.blob);
-                          return await res.blob();
-                        })
-                      );
-                      setOriginalBlobs(newOriginals);
 
                       setStatus(ProcessingStatus.READY);
 

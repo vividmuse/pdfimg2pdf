@@ -1,24 +1,24 @@
 import React, { useState } from 'react';
-import type { ScanMode } from '../../types';
+import type { ItemType } from '../../types';
 import { useScanService } from '../hooks/useScanService';
+import { useTranslation } from '../i18n/LanguageContext';
 
 interface ScanServicePanelProps {
     previewImages: Blob[];
-    onScanComplete?: (pdfUrl: string) => void;  // 添加pdfUrl参数
+    onScanComplete?: (pdfUrl: string) => void;
 }
 
 export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
     previewImages,
     onScanComplete,
 }) => {
+    const { t } = useTranslation();
     const {
         state,
-        scanMode,
-        watermark,
+        itemType,
         stage,
         stageMessage,
-        setScanMode,
-        setWatermark,
+        setItemType,
         startScan,
         reset,
     } = useScanService();
@@ -27,14 +27,14 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
 
     const handleStartScan = async () => {
         if (previewImages.length === 0) {
-            alert('请先处理图片');
+            alert(t('scan.pleaseProcessImages'));
             return;
         }
 
         try {
-            const pdfUrl = await startScan(previewImages);  // 接收PDF URL
+            const pdfUrl = await startScan(previewImages);
             console.log('Scan completed, loading PDF:', pdfUrl);
-            onScanComplete?.(pdfUrl);  // 传递给父组件
+            onScanComplete?.(pdfUrl);
         } catch (error) {
             // 错误已在Hook中处理
         }
@@ -63,7 +63,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                     fontWeight: 600,
                     color: '#1b1b1b',
                 }}>
-                    📄 扫描服务
+                    📄 {t('scan.title')}
                 </h3>
                 {!isProcessing && (
                     <button
@@ -77,12 +77,12 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                             fontWeight: 500,
                         }}
                     >
-                        {showConfig ? '收起配置' : '展开配置'}
+                        {showConfig ? t('scan.hideConfig') : t('scan.showConfig')}
                     </button>
                 )}
             </div>
 
-            {/* 配置区域 */}
+            {/* 配置区域 - 选择item_name类型 */}
             {showConfig && !isProcessing && (
                 <div style={{
                     marginBottom: '16px',
@@ -90,104 +90,70 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                     background: '#f6f7fb',
                     borderRadius: '8px',
                 }}>
-                    {/* 扫描模式选择 */}
-                    <div style={{ marginBottom: '12px' }}>
+                    <label style={{
+                        display: 'block',
+                        fontSize: '14px',
+                        fontWeight: 500,
+                        color: '#4f4f4f',
+                        marginBottom: '8px',
+                    }}>
+                        {t('scan.itemType')}
+                    </label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         <label style={{
-                            display: 'block',
-                            fontSize: '14px',
-                            fontWeight: 500,
-                            color: '#4f4f4f',
-                            marginBottom: '8px',
+                            padding: '12px',
+                            borderRadius: '8px',
+                            border: `2px solid ${itemType === 'document' ? '#667eea' : '#e0e0e0'}`,
+                            background: itemType === 'document' ? 'rgba(102, 126, 234, 0.05)' : 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
                         }}>
-                            扫描模式
+                            <input
+                                type="radio"
+                                name="itemType"
+                                value="document"
+                                checked={itemType === 'document'}
+                                onChange={(e) => setItemType(e.target.value as ItemType)}
+                                style={{ marginRight: '8px' }}
+                            />
+                            <span style={{ fontSize: '14px', fontWeight: 500 }}>{t('scan.type.document')}</span>
                         </label>
-                        <div style={{ display: 'flex', gap: '12px' }}>
-                            <label style={{
-                                flex: 1,
-                                padding: '12px',
-                                borderRadius: '8px',
-                                border: `2px solid ${scanMode === 'merge' ? '#667eea' : '#e0e0e0'}`,
-                                background: scanMode === 'merge' ? 'rgba(102, 126, 234, 0.05)' : 'white',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                            }}>
-                                <input
-                                    type="radio"
-                                    name="scanMode"
-                                    value="merge"
-                                    checked={scanMode === 'merge'}
-                                    onChange={(e) => setScanMode(e.target.value as ScanMode)}
-                                    style={{ marginRight: '8px' }}
-                                />
-                                <span style={{ fontSize: '14px', fontWeight: 500 }}>一页模式</span>
-                                <div style={{ fontSize: '12px', color: '#717171', marginTop: '4px' }}>
-                                    合并到一张纸
-                                </div>
-                            </label>
-                            <label style={{
-                                flex: 1,
-                                padding: '12px',
-                                borderRadius: '8px',
-                                border: `2px solid ${scanMode === 'separate' ? '#667eea' : '#e0e0e0'}`,
-                                background: scanMode === 'separate' ? 'rgba(102, 126, 234, 0.05)' : 'white',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                opacity: previewImages.length < 2 ? 0.5 : 1,
-                                pointerEvents: previewImages.length < 2 ? 'none' : 'auto',
-                            }}>
-                                <input
-                                    type="radio"
-                                    name="scanMode"
-                                    value="separate"
-                                    checked={scanMode === 'separate'}
-                                    onChange={(e) => setScanMode(e.target.value as ScanMode)}
-                                    style={{ marginRight: '8px' }}
-                                    disabled={previewImages.length < 2}
-                                />
-                                <span style={{ fontSize: '14px', fontWeight: 500 }}>两页模式</span>
-                                <div style={{ fontSize: '12px', color: '#717171', marginTop: '4px' }}>
-                                    分别成两张纸
-                                </div>
-                            </label>
-                        </div>
-                    </div>
-
-                    {/* 水印输入 */}
-                    <div>
                         <label style={{
-                            display: 'block',
-                            fontSize: '14px',
-                            fontWeight: 500,
-                            color: '#4f4f4f',
-                            marginBottom: '8px',
+                            padding: '12px',
+                            borderRadius: '8px',
+                            border: `2px solid ${itemType === 'remove-handwriting' ? '#667eea' : '#e0e0e0'}`,
+                            background: itemType === 'remove-handwriting' ? 'rgba(102, 126, 234, 0.05)' : 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
                         }}>
-                            水印文字（可选）
+                            <input
+                                type="radio"
+                                name="itemType"
+                                value="remove-handwriting"
+                                checked={itemType === 'remove-handwriting'}
+                                onChange={(e) => setItemType(e.target.value as ItemType)}
+                                style={{ marginRight: '8px' }}
+                            />
+                            <span style={{ fontSize: '14px', fontWeight: 500 }}>{t('scan.type.removeHandwriting')}</span>
                         </label>
-                        <input
-                            type="text"
-                            value={watermark}
-                            onChange={(e) => setWatermark(e.target.value)}
-                            placeholder="如：仅供XX使用"
-                            maxLength={50}
-                            style={{
-                                width: '100%',
-                                padding: '10px 12px',
-                                borderRadius: '6px',
-                                border: '2px solid #e0e0e0',
-                                fontSize: '14px',
-                                outline: 'none',
-                                transition: 'border-color 0.2s',
-                            }}
-                            onFocus={(e) => e.target.style.borderColor = '#667eea'}
-                            onBlur={(e) => e.target.style.borderColor = '#e0e0e0'}
-                        />
-                        <div style={{
-                            fontSize: '12px',
-                            color: '#717171',
-                            marginTop: '4px',
+                        <label style={{
+                            padding: '12px',
+                            borderRadius: '8px',
+                            border: `2px solid ${itemType === 'remove-watermark' ? '#667eea' : '#e0e0e0'}`,
+                            background: itemType === 'remove-watermark' ? 'rgba(102, 126, 234, 0.05)' : 'white',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
                         }}>
-                            {watermark.length}/50
-                        </div>
+                            <input
+                                type="radio"
+                                name="itemType"
+                                value="remove-watermark"
+                                checked={itemType === 'remove-watermark'}
+                                onChange={(e) => setItemType(e.target.value as ItemType)}
+                                style={{ marginRight: '8px' }}
+                            />
+                            <span style={{ fontSize: '14px', fontWeight: 500 }}>{t('scan.type.removeWatermark')}</span>
+                        </label>
                     </div>
                 </div>
             )}
@@ -257,7 +223,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                             textDecoration: 'underline',
                         }}
                     >
-                        重试
+                        {t('scan.retry')}
                     </button>
                 </div>
             )}
@@ -276,7 +242,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                         color: '#2e7d32',
                         fontWeight: 500,
                     }}>
-                        ✅ 扫描完成！PDF已开始下载
+                        ✅ {t('scan.complete.message')}
                     </div>
                 </div>
             )}
@@ -311,7 +277,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                         e.currentTarget.style.boxShadow = 'none';
                     }}
                 >
-                    {isProcessing ? '处理中...' : '🚀 发送到扫描服务'}
+                    {isProcessing ? t('scan.processing') : `🚀 ${t('scan.upload')}`}
                 </button>
 
                 {(stage === 'completed' || state.error) && (
@@ -337,7 +303,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                             e.currentTarget.style.color = '#667eea';
                         }}
                     >
-                        重置
+                        {t('scan.reset')}
                     </button>
                 )}
             </div>
@@ -350,7 +316,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                     color: '#717171',
                     textAlign: 'center',
                 }}>
-                    💡 请先上传并处理图片
+                    💡 {t('scan.uploadHint')}
                 </div>
             )}
         </div>

@@ -1,17 +1,15 @@
 import { useState } from 'react';
-import type { ScanMode, ScanServiceState } from '../../types';
+import type { ItemType, ScanServiceState } from '../../types';
 import { performScan } from '../../services/scanService';
 
 type ProgressStage = 'idle' | 'uploading' | 'creating' | 'processing' | 'downloading' | 'completed' | 'error';
 
 interface UseScanServiceReturn {
     state: ScanServiceState;
-    scanMode: ScanMode;
-    watermark: string;
+    itemType: ItemType;
     stage: ProgressStage;
     stageMessage: string;
-    setScanMode: (mode: ScanMode) => void;
-    setWatermark: (text: string) => void;
+    setItemType: (type: ItemType) => void;
     startScan: (imageBlobs: Blob[]) => Promise<string>;  // 返回PDF URL
     reset: () => void;
 }
@@ -34,8 +32,7 @@ export function useScanService(): UseScanServiceReturn {
         error: null,
     });
 
-    const [scanMode, setScanMode] = useState<ScanMode>('merge');
-    const [watermark, setWatermark] = useState<string>('');
+    const [itemType, setItemType] = useState<ItemType>('document');  // 默认文档扫描
     const [stage, setStage] = useState<ProgressStage>('idle');
 
     const startScan = async (imageBlobs: Blob[]): Promise<string> => {  // 返回PDF URL
@@ -52,8 +49,7 @@ export function useScanService(): UseScanServiceReturn {
             // 执行扫描流程，返回PDF URL
             const pdfUrl = await performScan(
                 imageBlobs,
-                scanMode,
-                watermark,
+                itemType,  // 使用itemType
                 (currentStage: string, progress: number) => {
                     setStage(currentStage as ProgressStage);
                     setState(prev => ({
@@ -101,12 +97,10 @@ export function useScanService(): UseScanServiceReturn {
 
     return {
         state,
-        scanMode,
-        watermark,
+        itemType,
         stage,
         stageMessage: STAGE_MESSAGES[stage],
-        setScanMode,
-        setWatermark,
+        setItemType,
         startScan,
         reset,
     };

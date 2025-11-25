@@ -29,7 +29,7 @@ const App: React.FC = () => {
   const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]);
   const [uploadBlobs, setUploadBlobs] = useState<Blob[]>([]);  // 高质量处理后图片用于上传
 
-  const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'render') => {
+  const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'extract') => {
     try {
       setStatus(ProcessingStatus.PROCESSING_PDF);
       setFileName(files.length === 1 ? files[0].name : `${files.length} files`);
@@ -43,6 +43,15 @@ const App: React.FC = () => {
 
       setPdfPages(allImages);
       setStatus(ProcessingStatus.READY);
+
+      // 如果是提取模式，自动清理小图片和重复图片
+      if (mode === 'extract' && allImages.length > 0) {
+        // 延迟执行以确保状态已更新
+        setTimeout(() => {
+          handleAutoClean();
+        }, 100);
+      }
+
       // uploadBlobs会在PreviewArea的onUploadBlobsGenerated中设置
     } catch (error) {
       console.error(error);

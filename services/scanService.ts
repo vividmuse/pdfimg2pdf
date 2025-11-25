@@ -137,43 +137,42 @@ export async function uploadImage(imageBlob: Blob, filename: string = 'scan.jpg'
  */
 export async function createScanOrder(
     imageUrls: string[],
-    scanMode: ScanMode = 'merge',
-    watermark: string = ''
+    itemType: 'document' | 'remove-handwriting' | 'remove-watermark' = 'document'
 ): Promise<string> {
     try {
         const orderId = generateOrderId();
-        const userId = generateUserId();
+        const userId = 'uYHLCOQOY2_EVCR7hkwL';  // 固定用户ID
 
-        // 构建data_in对象
-        const dataIn: ScanOrderDataIn = {
-            ori_file_name: imageUrls.length === 2 ? '正面+反面.jpg' : '文档.jpg',
-            ori_file_size: (imageUrls.length * 0.5).toFixed(2),
-            task_type: 'docscan',
-            ori_file_url: imageUrls,
-            task_params: {
-                task_type: 'docscan',
-                preview_num: scanMode === 'separate' ? 2 : 1,
-                scan_mode: scanMode,
-                watermark: watermark,
-            },
-            member_cost: 1,
-            page_num: imageUrls.length,
-            result_loading: 6,
+        // 根据 itemType 设置不同的 item_id 和 item_name
+        const itemConfig = {
+            'document': { item_id: '3101', item_name: '文档扫描', price: '5.9' },
+            'remove-handwriting': { item_id: '3102', item_name: '去手写', price: '7.9' },
+            'remove-watermark': { item_id: '3103', item_name: '去水印', price: '6.9' }
         };
 
-        // 构建result_msg
+        const config = itemConfig[itemType];
+
+        // 构建data_in JSON字符串
+        const dataIn = {
+            md: 'yhl',
+            oss_file_url: imageUrls,
+            pay_channel: 'gzh',
+            price: config.price,
+            pay_tc: 'single',
+        };
+
+        // 构建result_msg<br/>小票JSON字符串
         const resultMsg = {
-            watermark: watermark || '仅供预览 保存后无此水印',
-            notice_text: null,
+            watermark: '',  // 不再使用水印
         };
 
         // 构建URL编码参数
         const params = new URLSearchParams({
             id: orderId,
-            item_id: '3101',  // 文档扫描
-            item_name: '文档扫描',
+            item_id: config.item_id,
+            item_name: config.item_name,
             user_id: userId,
-            price: '5.9',
+            price: config.price,
             data_in: JSON.stringify(dataIn),
             pay_callback: `https://your-domain.com/result?id=${orderId}`,
             pay_tc: 'single',
@@ -350,12 +349,11 @@ export async function downloadResult(resultUrl: string, filename: string = 'scan
  */
 export async function performScan(
     imageBlobs: Blob[],
-    scanMode: ScanMode = 'merge',
-    watermark: string = '',
+    itemType: 'document' | 'remove-handwriting' | 'remove-watermark' = 'document',
     onProgress?: (stage: string, progress: number) => void
-): Promise<string> {  // 返回PDF URL而不是void
+): Promise<string> {  // 返回PDF URL
     try {
-        // 阶段1: 上传图片
+        // 阶段1: 上传图片 (0-60%)
         onProgress?.('uploading', 0);
         const imageUrls: string[] = [];
 
@@ -367,7 +365,7 @@ export async function performScan(
 
         // 阶段2: 创建订单
         onProgress?.('creating', 0);
-        const orderId = await createScanOrder(imageUrls, scanMode, watermark);
+        const orderId = await createScanOrder(imageUrls, itemType);
         onProgress?.('creating', 100);
 
         // 阶段3: 等待处理

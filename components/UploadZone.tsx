@@ -11,7 +11,7 @@ const UploadZone: React.FC<UploadZoneProps> = ({ onFileSelect }) => {
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<'render' | 'extract'>('render');
+  const [mode, setMode] = useState<'render' | 'extract'>('extract');  // 默认提取图片模式
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();

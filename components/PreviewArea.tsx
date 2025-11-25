@@ -137,29 +137,28 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
   }, [pages, layoutMode, pagesPerGroup, processingConfig, orientation, onPreviewGenerated, onUploadBlobsGenerated]);
 
 
-  const handleDownload = (url?: string, index?: number) => {
-    const downloadUrl = url || previewUrls[0];
-    if (!downloadUrl) return;
+  const handleDownload = async (url?: string, index?: number) => {
+    const targetUrls = url ? [url] : previewUrls;
+    if (targetUrls.length === 0) return;
 
-    const link = document.createElement('a');
-    if (layoutMode === 'grouped' && index !== undefined) {
-      link.download = `stamped_document_group_${index + 1}_${Date.now()}.jpg`;
-    } else {
-      link.download = `stamped_document_${layoutMode}_${Date.now()}.jpg`;
-    }
-    link.href = downloadUrl;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // Dynamically import to avoid SSR issues if any (though this is client-side)
+    const { downloadImagesAsPdf } = await import('../services/pdfExportService');
+
+    const timestamp = Date.now();
+    const filename = layoutMode === 'grouped' && index !== undefined
+      ? `stamped_document_group_${index + 1}_${timestamp}.pdf`
+      : `stamped_document_${layoutMode}_${timestamp}.pdf`;
+
+    await downloadImagesAsPdf(targetUrls, filename);
   };
 
-  const handleDownloadAll = () => {
-    // Download all grouped images
-    previewUrls.forEach((url, index) => {
-      setTimeout(() => {
-        handleDownload(url, index);
-      }, index * 1000); // Add delay to prevent browser from blocking multiple downloads
-    });
+  const handleDownloadAll = async () => {
+    // Download all grouped images as a SINGLE PDF
+    if (previewUrls.length === 0) return;
+
+    const { downloadImagesAsPdf } = await import('../services/pdfExportService');
+    const timestamp = Date.now();
+    await downloadImagesAsPdf(previewUrls, `stamped_document_all_${timestamp}.pdf`);
   };
 
   const handlePrint = (url?: string) => {
@@ -274,7 +273,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
                 className="flex items-center justify-center space-x-2 bg-[#d97757] text-white px-4 py-2 rounded-lg hover:bg-[#da7756] transition-colors disabled:opacity-50 text-sm"
               >
                 {isStitching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                <span>{t('preview.downloadAll', { count: previewUrls.length })}</span>
+                <span>{t('preview.downloadAllPdf', { count: previewUrls.length })}</span>
               </button>
             )}
             <button
@@ -283,7 +282,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
               className="flex items-center justify-center space-x-2 bg-[#383838] text-white px-4 py-2 rounded-lg hover:bg-[#6b6b6b] transition-colors disabled:opacity-50 text-sm"
             >
               {isStitching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              <span>{previewUrls.length > 1 ? t('preview.downloadFirst') : t('preview.downloadImage')}</span>
+              <span>{t('preview.downloadPdf')}</span>
             </button>
             <button
               onClick={() => handlePrint()}

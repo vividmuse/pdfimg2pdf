@@ -106,7 +106,10 @@ export interface ScanOrderResponse {
 }
 
 export type ScanOrderStatus = 'pending' | 'processing' | 'completed' | 'failed';
+// 扫描服务item类型
+export type ItemType = 'document' | 'remove-handwriting' | 'remove-watermark';
 
+// 扫描服务状态
 export interface ScanServiceState {
   isUploading: boolean;
   isProcessing: boolean;

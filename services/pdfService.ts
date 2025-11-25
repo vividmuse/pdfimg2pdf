@@ -256,6 +256,10 @@ export const convertPdfToImages = async (file: File, mode: 'render' | 'extract' 
 // Helper to ensure OpenCV is loaded
 const ensureOpenCVLoaded = async (): Promise<void> => {
   // Wait for cv to be available and ready (wasm init)
+  const loader = (window as any).__loadOpenCV;
+  if (loader) {
+    try { await loader; } catch (e) { /* ignore, fallback to readiness check */ }
+  }
   if ((window as any).cv && (window as any).cv.ready) {
     await (window as any).cv.ready;
     return;

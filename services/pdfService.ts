@@ -260,9 +260,12 @@ const ensureOpenCVLoaded = async (): Promise<void> => {
   if (loader) {
     try { await loader; } catch (e) { /* ignore, fallback to readiness check */ }
   }
-  if ((window as any).cv && (window as any).cv.ready) {
-    await (window as any).cv.ready;
-    return;
+  if ((window as any).cv) {
+    if ((window as any).cv.ready) {
+      await (window as any).cv.ready;
+      return;
+    }
+    return; // cv present without ready hook
   }
 
   return new Promise((resolve, reject) => {

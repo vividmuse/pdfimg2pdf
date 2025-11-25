@@ -42,6 +42,15 @@
   <!-- OpenCV: prefer self-hosted to avoid CORP; fallback to doc site -->
   <script type="text/javascript">
     (function () {
+      // Ensure wasm is loaded from the same folder as opencv.js
+      window.Module = window.Module || {};
+      window.Module.locateFile = function (path) {
+        if (path.endsWith('.wasm')) {
+          return '/opencv/' + path;
+        }
+        return '/opencv/' + path;
+      };
+
       const urls = [
         // Put a copy of opencv.js here: public/opencv/opencv.js
         '/opencv/opencv.js',

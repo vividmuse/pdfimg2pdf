@@ -35,22 +35,30 @@ const App: React.FC = () => {
       setFileName(files.length === 1 ? files[0].name : `${files.length} files`);
 
       // Process all files and combine results
-      const allImages: PdfPageImage[] = [];
+      let allImages: PdfPageImage[] = [];
       for (const file of files) {
         const images = await convertPdfToImages(file, mode);
         allImages.push(...images);
       }
 
-      setPdfPages(allImages);
-      setStatus(ProcessingStatus.READY);
-
       // 如果是提取模式，自动清理小图片和重复图片
       if (mode === 'extract' && allImages.length > 0) {
-        // 延迟执行以确保状态已更新
-        setTimeout(() => {
-          handleAutoClean();
-        }, 100);
+        // Calculate max area to identify "main" pages
+        const maxArea = Math.max(...allImages.map(img => img.width * img.height));
+
+        // Filter out images that are significantly smaller (< 20% of max area)
+        // This removes small watermarks, QR codes, icons, etc.
+        const thresholdRatio = 0.2;
+        allImages = allImages.filter(img => {
+          const area = img.width * img.height;
+          return area > (maxArea * thresholdRatio);
+        });
+
+        console.log(`Auto-cleaned: removed ${allImages.length} small images`);
       }
+
+      setPdfPages(allImages);
+      setStatus(ProcessingStatus.READY);
 
       // uploadBlobs会在PreviewArea的onUploadBlobsGenerated中设置
     } catch (error) {

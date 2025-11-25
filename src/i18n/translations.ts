@@ -129,6 +129,7 @@ export const translations: Record<Language, Record<string, string>> = {
         "scan.complete.message": "Scan complete! PDF loaded",
         "scan.uploadHint": "Please upload and process images first",
         "scan.pleaseProcessImages": "Please process images first",
+        "scan.uploadWarning": "⚠️ This service will upload your data to a server for processing",
     },
     zh: {
         "app.title": "PDF 拼接",
@@ -258,6 +259,7 @@ export const translations: Record<Language, Record<string, string>> = {
         "scan.complete.message": "扫描完成！PDF已加载",
         "scan.uploadHint": "请先上传并处理图片",
         "scan.pleaseProcessImages": "请先处理图片",
+        "scan.uploadWarning": "⚠️ 此服务会将您的数据上传到服务器进行处理",
     },
     fr: {
         "app.title": "Assembleur PDF",
@@ -385,8 +387,9 @@ export const translations: Record<Language, Record<string, string>> = {
         "scan.type.removeHandwriting": "Supprimer l'écriture manuscrite",
         "scan.type.removeWatermark": "Supprimer le filigrane",
         "scan.complete.message": "Numérisation terminée ! PDF chargé",
-        "scan.uploadHint": "Veuillez d'abord télécharger et traiter les images",
+        "scan.uploadHint": "Veuillez d'abord telecharger et traiter les images",
         "scan.pleaseProcessImages": "Veuillez d'abord traiter les images",
+        "scan.uploadWarning": "⚠️ Ce service telechargera vos donnees sur un serveur pour traitement",
     },
     es: {
         "app.title": "Unificador de PDF",
@@ -514,8 +517,9 @@ export const translations: Record<Language, Record<string, string>> = {
         "scan.type.removeHandwriting": "Eliminar escritura a mano",
         "scan.type.removeWatermark": "Eliminar marca de agua",
         "scan.complete.message": "¡Escaneo completo! PDF cargado",
-        "scan.uploadHint": "Por favor suba y procese imágenes primero",
-        "scan.pleaseProcessImages": "Por favor procese imágenes primero",
+        "scan.uploadHint": "Por favor suba y procese imagenes primero",
+        "scan.pleaseProcessImages": "Por favor procese imagenes primero",
+        "scan.uploadWarning": "⚠️ Este servicio cargara sus datos en un servidor para procesarlos",
     },
     de: {
         "app.title": "PDF Stitcher",
@@ -645,6 +649,7 @@ export const translations: Record<Language, Record<string, string>> = {
         "scan.complete.message": "Scan abgeschlossen! PDF geladen",
         "scan.uploadHint": "Bitte laden Sie zuerst Bilder hoch und verarbeiten Sie sie",
         "scan.pleaseProcessImages": "Bitte verarbeiten Sie zuerst Bilder",
+        "scan.uploadWarning": "⚠️ Dieser Service ladt Ihre Daten zur Verarbeitung auf einen Server hoch",
     },
     th: {
         "app.title": "ตัวเชื่อม PDF",
@@ -774,5 +779,6 @@ export const translations: Record<Language, Record<string, string>> = {
         "scan.complete.message": "สแกนเสร็จสมบูรณ์! PDF โหลดแล้ว",
         "scan.uploadHint": "โปรดอัปโหลดและประมวลผลรูปภาพก่อน",
         "scan.pleaseProcessImages": "โปรดประมวลผลรูปภาพก่อน",
+        "scan.uploadWarning": "⚠️ บริการนี้จะอัปโหลดข้อมูลของคุณไปยังเซิร์ฟเวอร์เพื่อประมวลผล",
     }
 };

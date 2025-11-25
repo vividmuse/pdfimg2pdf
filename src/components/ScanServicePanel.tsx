@@ -90,6 +90,19 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                     background: '#f6f7fb',
                     borderRadius: '8px',
                 }}>
+                    {/* 数据上传警告 */}
+                    <div style={{
+                        marginBottom: '12px',
+                        padding: '10px',
+                        background: '#fff3cd',
+                        border: '1px solid #ffc107',
+                        borderRadius: '6px',
+                        fontSize: '13px',
+                        color: '#856404',
+                    }}>
+                        {t('scan.uploadWarning')}
+                    </div>
+
                     <label style={{
                         display: 'block',
                         fontSize: '14px',

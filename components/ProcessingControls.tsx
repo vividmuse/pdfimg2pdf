@@ -20,10 +20,27 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
 
     return (
         <div className="bg-white p-4 rounded-xl border border-[#e0e0e0] shadow-sm">
-            <h3 className="text-sm font-semibold text-[#383838] mb-3 flex items-center">
-                <span className="text-lg mr-2">🎨</span>
-                {t('processing.title')}
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-[#383838] flex items-center">
+                    <span className="text-lg mr-2">🎨</span>
+                    {t('processing.title')}
+                </h3>
+                <button
+                    onClick={() => onChange({
+                        threshold: 0,
+                        brightness: 0,
+                        contrast: 0,
+                        targetColors: undefined,
+                        colorTolerance: 20,
+                        strongBinarize: false,
+                        documentEnhance: false
+                    })}
+                    className="text-xs text-slate-600 hover:text-red-600 hover:bg-red-50 px-2 py-1 rounded transition-colors"
+                    title="重置所有处理参数"
+                >
+                    还原
+                </button>
+            </div>
 
             {/* Eyedropper Button */}
             {sampleImage && (
@@ -35,28 +52,41 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
                         <Pipette className="w-4 h-4" />
                         <span>{t('processing.eyedropper')}</span>
                     </button>
-                    {config.targetColor && (
-                        <div className="mt-2 flex items-center justify-between text-xs">
-                            <div className="flex items-center space-x-2">
-                                <div
-                                    className="w-6 h-6 rounded border border-slate-300"
-                                    style={{ backgroundColor: `rgb(${config.targetColor.r}, ${config.targetColor.g}, ${config.targetColor.b})` }}
-                                />
-                                <span className="text-slate-600">RGB({config.targetColor.r}, {config.targetColor.g}, {config.targetColor.b})</span>
-                            </div>
+                    {config.targetColors && config.targetColors.length > 0 && (
+                        <div className="mt-2 space-y-2">
+                            {config.targetColors.map((color, index) => (
+                                <div key={index} className="flex items-center justify-between text-xs bg-slate-50 p-2 rounded">
+                                    <div className="flex items-center space-x-2">
+                                        <div
+                                            className="w-6 h-6 rounded border border-slate-300"
+                                            style={{ backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})` }}
+                                        />
+                                        <span className="text-slate-600">RGB({color.r}, {color.g}, {color.b})</span>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            const newColors = config.targetColors?.filter((_, i) => i !== index);
+                                            onChange({ ...config, targetColors: newColors?.length ? newColors : undefined });
+                                        }}
+                                        className="text-red-500 hover:text-red-700"
+                                    >
+                                        {t('common.remove')}
+                                    </button>
+                                </div>
+                            ))}
                             <button
-                                onClick={() => onChange({ ...config, targetColor: undefined })}
-                                className="text-red-500 hover:text-red-700"
+                                onClick={() => onChange({ ...config, targetColors: undefined })}
+                                className="w-full text-xs text-red-500 hover:text-red-700 py-1"
                             >
-                                {t('common.clear')}
+                                {t('common.clearAll')}
                             </button>
                         </div>
                     )}
                 </div>
             )}
 
-            {/* Color Tolerance Slider - only when targetColor is set */}
-            {config.targetColor && (
+            {/* Color Tolerance Slider - only when targetColors is set */}
+            {config.targetColors && config.targetColors.length > 0 && (
                 <div className="mb-4">
                     <div className="flex items-center justify-between mb-2">
                         <label className="text-sm font-medium text-[#383838]">{t('processing.colorTolerance')}</label>
@@ -141,6 +171,25 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
             <div className="space-y-3 pt-2 border-t border-slate-100">
                 <div className="flex items-center justify-between">
                     <label className="text-sm font-medium text-[#383838] flex items-center cursor-pointer">
+                        <span className="mr-2">📄</span>
+                        文档增强
+                    </label>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={config.documentEnhance || false}
+                            onChange={(e) => onChange({ ...config, documentEnhance: e.target.checked })}
+                            className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                    </label>
+                </div>
+                <div className="text-xs text-slate-500 -mt-1 ml-7">
+                    字体更清晰 + 背景更白
+                </div>
+
+                <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-[#383838] flex items-center cursor-pointer">
                         <span className="mr-2">🖨️</span>
                         Strong B/W Scan
                     </label>
@@ -159,9 +208,9 @@ const ProcessingControls: React.FC<ProcessingControlsProps> = ({ config, onChang
             {showColorPicker && sampleImage && (
                 <ColorPickerModal
                     image={sampleImage}
-                    onColorPicked={(color) => {
-                        onChange({ ...config, targetColor: color, colorTolerance: config.colorTolerance || 20 });
-                        setShowColorPicker(false);
+                    selectedColors={config.targetColors || []}
+                    onColorsChanged={(colors) => {
+                        onChange({ ...config, targetColors: colors.length > 0 ? colors : undefined, colorTolerance: config.colorTolerance || 20 });
                     }}
                     onClose={() => setShowColorPicker(false)}
                 />

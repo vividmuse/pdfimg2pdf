@@ -261,7 +261,7 @@ const processImage = async (
     const img = new Image();
     img.onload = async () => {
       // If no processing needed
-      if (config.threshold === 0 && config.brightness === 0 && config.contrast === 0 && !config.targetColor && !config.strongBinarize) {
+      if (config.threshold === 0 && config.brightness === 0 && config.contrast === 0 && !config.targetColors && !config.strongBinarize && !config.documentEnhance) {
         resolve(img);
         return;
       }
@@ -288,7 +288,7 @@ const processStandard = (imageData: ImageData, config: ProcessingConfig, ctx: Ca
   const threshold = config.threshold;
   const brightness = config.brightness;
   const contrast = config.contrast;
-  const targetColor = config.targetColor;
+  const targetColors = config.targetColors; // Changed from targetColor to targetColors
   const colorTolerance = config.colorTolerance || 20;
 
   // Fallback strong binarize when OpenCV is unavailable
@@ -317,6 +317,56 @@ const processStandard = (imageData: ImageData, config: ProcessingConfig, ctx: Ca
     return;
   }
 
+  // Document Enhancement - Make text clearer and background whiter
+  if (config.documentEnhance) {
+    // Step 1: Calculate global statistics for adaptive processing
+    let sumR = 0, sumG = 0, sumB = 0, count = 0;
+    const grayscale = new Array(data.length / 4);
+
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+      grayscale[j] = gray;
+      sumR += r;
+      sumG += g;
+      sumB += b;
+      count++;
+    }
+
+    const avgR = sumR / count;
+    const avgG = sumG / count;
+    const avgB = sumB / count;
+    const avgGray = 0.299 * avgR + 0.587 * avgG + 0.114 * avgB;
+
+    // Step 2: Determine adaptive threshold
+    // Use a threshold slightly below average to separate text from background
+    const adaptiveThreshold = avgGray * 0.75;
+
+    // Step 3: Apply enhancement
+    for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+      const gray = grayscale[j];
+
+      if (gray > adaptiveThreshold) {
+        // Likely background - make it whiter
+        // Apply aggressive whitening for light pixels
+        const whitenFactor = (gray - adaptiveThreshold) / (255 - adaptiveThreshold);
+        const enhanced = 255 - (255 - gray) * (1 - whitenFactor * 0.8);
+        data[i] = data[i + 1] = data[i + 2] = Math.min(255, enhanced);
+      } else {
+        // Likely text - make it clearer (darker and higher contrast)
+        // Apply contrast enhancement for dark pixels
+        const darkenFactor = 1 - (gray / adaptiveThreshold);
+        const enhanced = gray * (1 - darkenFactor * 0.4);
+        data[i] = data[i + 1] = data[i + 2] = Math.max(0, enhanced);
+      }
+    }
+
+    // Don't return here - continue with other processing options
+    // This allows document enhancement to be combined with brightness, contrast, etc.
+  }
+
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i];
     const g = data[i + 1];
@@ -325,17 +375,21 @@ const processStandard = (imageData: ImageData, config: ProcessingConfig, ctx: Ca
     let isBackground = false;
 
     // 1. Check Color-based Background Removal (using ORIGINAL pixel values)
-    if (targetColor) {
-      const colorDistance = Math.sqrt(
-        Math.pow(r - targetColor.r, 2) +
-        Math.pow(g - targetColor.g, 2) +
-        Math.pow(b - targetColor.b, 2)
-      );
-      // Normalize distance to 0-100 scale
-      const normalizedDistance = (colorDistance / 441) * 100;
+    // Check against all target colors
+    if (targetColors && targetColors.length > 0) {
+      for (const targetColor of targetColors) {
+        const colorDistance = Math.sqrt(
+          Math.pow(r - targetColor.r, 2) +
+          Math.pow(g - targetColor.g, 2) +
+          Math.pow(b - targetColor.b, 2)
+        );
+        // Normalize distance to 0-100 scale
+        const normalizedDistance = (colorDistance / 441) * 100;
 
-      if (normalizedDistance < colorTolerance) {
-        isBackground = true;
+        if (normalizedDistance < colorTolerance) {
+          isBackground = true;
+          break; // Found a matching color, no need to check others
+        }
       }
     }
 

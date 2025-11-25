@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProcessingStatus, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation } from './types';
 import UploadZone from './components/UploadZone';
 import LayoutControls from './components/LayoutControls';
@@ -6,6 +6,7 @@ import ProcessingControls from './components/ProcessingControls';
 import GroupControls from './components/GroupControls';
 import PreviewArea from './components/PreviewArea';
 import ImageSelector from './components/ImageSelector';
+import { ScanServicePanel } from './src/components/ScanServicePanel';
 import { convertPdfToImages } from './services/pdfService';
 import { FileText, ScrollText, Github, User } from 'lucide-react';
 import { useTranslation } from './src/i18n/LanguageContext';
@@ -25,6 +26,7 @@ const App: React.FC = () => {
     strongBinarize: false
   });
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
+  const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]);
 
   const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'render') => {
     try {
@@ -87,6 +89,13 @@ const App: React.FC = () => {
   const handleClear = () => {
     setPdfPages([]);
     setStatus(ProcessingStatus.IDLE);
+    // Reset processing config to default values
+    setProcessingConfig({
+      threshold: 0,
+      brightness: 0,
+      contrast: 0,
+      strongBinarize: false
+    });
   };
 
   return (
@@ -211,7 +220,38 @@ const App: React.FC = () => {
                 isProcessing={status === ProcessingStatus.PROCESSING_PDF}
                 processingConfig={processingConfig}
                 orientation={orientation}
+                onPreviewGenerated={setPreviewBlobs}
               />
+
+              {/* Scan Service Panel */}
+              {pdfPages.length > 0 && (
+                <ScanServicePanel
+                  previewImages={previewBlobs}
+                  onScanComplete={async (pdfUrl: string) => {
+                    try {
+                      console.log('Loading scanned PDF from:', pdfUrl);
+                      setStatus(ProcessingStatus.PROCESSING_PDF);
+
+                      // 从URL下载PDF
+                      const response = await fetch(pdfUrl);
+                      const blob = await response.blob();
+                      const file = new File([blob], 'scanned.pdf', { type: 'application/pdf' });
+
+                      // 转换为图片并更新预览
+                      const images = await convertPdfToImages(file, 'render');
+                      setPdfPages(images);
+                      setFileName('scanned.pdf');
+                      setStatus(ProcessingStatus.READY);
+
+                      console.log('Scanned PDF loaded successfully');
+                    } catch (error) {
+                      console.error('Failed to load scanned PDF:', error);
+                      setStatus(ProcessingStatus.ERROR);
+                      alert('加载扫描PDF失败');
+                    }
+                  }}
+                />
+              )}
             </div>
           </div>
         )}

@@ -11,6 +11,7 @@ interface PreviewAreaProps {
   pagesPerGroup: number;
   processingConfig: ProcessingConfig;
   orientation: PageOrientation;
+  onPreviewGenerated?: (blobs: Blob[]) => void;
 }
 
 const PreviewArea: React.FC<PreviewAreaProps> = ({
@@ -19,7 +20,8 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
   pagesPerGroup,
   isProcessing,
   processingConfig,
-  orientation
+  orientation,
+  onPreviewGenerated
 }) => {
   const { t } = useTranslation();
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,21 +33,22 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
     const generatePreview = async () => {
       if (pages.length === 0) {
         setPreviewUrls([]);
+        onPreviewGenerated?.([]);
         return;
       }
 
       setIsStitching(true);
       try {
+        let urls: string[] = [];
         // If grouped layout, generate all group images
         if (pagesPerGroup > 1) {
-          const urls = await generateGroupedImages(
+          urls = await generateGroupedImages(
             pages,
             layoutMode,
             pagesPerGroup,
             processingConfig,
             orientation
           );
-          setPreviewUrls(urls);
         } else {
           // Single page or vertical layout - generate one long image or single images
           // For vertical layout, we stitch everything into one image
@@ -80,7 +83,17 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
             processingConfig,
             orientation
           );
-          setPreviewUrls([url]);
+          urls = [url];
+        }
+        setPreviewUrls(urls);
+
+        // Convert URLs to Blobs for the parent component
+        if (onPreviewGenerated) {
+          const blobs = await Promise.all(urls.map(async (url) => {
+            const res = await fetch(url);
+            return await res.blob();
+          }));
+          onPreviewGenerated(blobs);
         }
       } catch (error) {
         console.error('Error generating preview:', error);
@@ -92,7 +105,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
     // Debounce preview generation
     const timer = setTimeout(generatePreview, 500);
     return () => clearTimeout(timer);
-  }, [pages, layoutMode, pagesPerGroup, processingConfig, orientation]);
+  }, [pages, layoutMode, pagesPerGroup, processingConfig, orientation, onPreviewGenerated]);
 
 
   const handleDownload = (url?: string, index?: number) => {

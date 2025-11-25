@@ -258,7 +258,12 @@ const ensureOpenCVLoaded = async (): Promise<void> => {
   // Wait for cv to be available and ready (wasm init)
   const loader = (window as any).__loadOpenCV;
   if (loader) {
-    try { await loader; } catch (e) { /* ignore, fallback to readiness check */ }
+    try {
+      await Promise.race([
+        loader,
+        new Promise((resolve) => setTimeout(resolve, 6000)) // timeout fallback
+      ]);
+    } catch (e) { /* ignore, fallback to readiness check */ }
   }
   if ((window as any).cv) {
     if ((window as any).cv.ready) {
@@ -275,7 +280,10 @@ const ensureOpenCVLoaded = async (): Promise<void> => {
       if (cv) {
         try {
           if (cv.ready) {
-            await cv.ready;
+            await Promise.race([
+              cv.ready,
+              new Promise((resolve) => setTimeout(resolve, 3000))
+            ]);
           }
           clearInterval(check);
           resolve();
@@ -285,7 +293,7 @@ const ensureOpenCVLoaded = async (): Promise<void> => {
         }
       }
       count++;
-      if (count > 120) { // Wait up to ~12s
+      if (count > 80) { // Wait up to ~8s
         clearInterval(check);
         reject(new Error("OpenCV failed to load"));
       }
@@ -739,6 +747,7 @@ const autoDeskewAndCrop = (cv: any, src: any): any => {
             try {
               await ensureOpenCVLoaded();
               const cv = (window as any).cv;
+              if (!cv) throw new Error("OpenCV not available");
 
           // Create canvas to read image data
           const canvas = document.createElement('canvas');

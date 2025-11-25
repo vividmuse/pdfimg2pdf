@@ -39,52 +39,6 @@
 
   <!-- External Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <!-- OpenCV: prefer self-hosted to avoid CORP; fallback to doc site -->
-  <script type="text/javascript">
-    (function () {
-      // Ensure wasm is loaded from the same folder as opencv.js
-      window.Module = window.Module || {};
-      window.Module.locateFile = function (path) {
-        if (path.endsWith('.wasm')) {
-          return '/opencv/' + path;
-        }
-        return '/opencv/' + path;
-      };
-
-      const urls = [
-        // Put a copy of opencv.js here: public/opencv/opencv.js
-        '/opencv/opencv.js',
-        'https://docs.opencv.org/4.x/opencv.js'
-      ];
-      window.__loadOpenCV = new Promise((resolve, reject) => {
-        let idx = 0;
-        const tryNext = () => {
-          if (idx >= urls.length) {
-            reject(new Error('Failed to load OpenCV script'));
-            return;
-          }
-          const s = document.createElement('script');
-          s.src = urls[idx];
-          s.async = true;
-          s.crossOrigin = 'anonymous';
-          s.onload = () => {
-            if (window.cv) {
-              resolve(window.cv);
-            } else {
-              idx += 1;
-              tryNext();
-            }
-          };
-          s.onerror = () => {
-            idx += 1;
-            tryNext();
-          };
-          document.head.appendChild(s);
-        };
-        tryNext();
-      });
-    })();
-  </script>
 
   <!-- PDF.js Worker Configuration -->
   <script>

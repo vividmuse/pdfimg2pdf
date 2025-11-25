@@ -15,8 +15,6 @@ export interface ProcessingConfig {
   contrast: number; // -100 to 100
   targetColor?: { r: number; g: number; b: number };
   colorTolerance?: number; // 0-100
-  useAdaptiveThreshold?: boolean;
-  autoDewarp?: boolean;
   strongBinarize?: boolean;
 }
 

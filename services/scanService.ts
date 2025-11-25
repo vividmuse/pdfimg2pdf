@@ -152,18 +152,27 @@ export async function createScanOrder(
 
         const config = itemConfig[itemType];
 
-        // 构建data_in JSON字符串
+        // 构建data_in对象（保持原有结构）
         const dataIn = {
-            md: 'yhl',
-            oss_file_url: imageUrls,
-            pay_channel: 'gzh',
-            price: config.price,
-            pay_tc: 'single',
+            ori_file_name: imageUrls.length === 2 ? '正面+反面.jpg' : '文档.jpg',
+            ori_file_size: (imageUrls.length * 0.5).toFixed(2),
+            task_type: 'docscan',
+            ori_file_url: imageUrls,
+            task_params: {
+                task_type: 'docscan',
+                preview_num: 1,  // 固定为1
+                scan_mode: 'merge',  // 固定为merge
+                watermark: '',  // 空水印
+            },
+            member_cost: 1,
+            page_num: imageUrls.length,
+            result_loading: 6,
         };
 
-        // 构建result_msg<br/>小票JSON字符串
+        // 构建result_msg
         const resultMsg = {
-            watermark: '',  // 不再使用水印
+            watermark: '',
+            notice_text: null,
         };
 
         // 构建URL编码参数
@@ -266,8 +275,17 @@ export async function pollOrderStatus(
 
                 // 检查订单完成状态
                 // status: 1 表示订单已完成
-                // data_out: 包含PDF下载链接（JSON字符串）
+                // data_out: 包含PDF下载链接（JSON字符串）或错误消息（纯文本）
                 if (result.status === 1 && result.data_out) {
+                    // 检查data_out是否是错误消息
+                    const dataOutStr = String(result.data_out).trim();
+
+                    // 如果包含错误关键词，说明处理失败
+                    if (dataOutStr.includes('出错') || dataOutStr.includes('失败') || dataOutStr.includes('error') || dataOutStr.includes('Error')) {
+                        reject(new Error(`扫描服务处理失败: ${dataOutStr}`));
+                        return;
+                    }
+
                     try {
                         // data_out是JSON字符串，需要解析
                         const dataOut = typeof result.data_out === 'string'
@@ -288,7 +306,8 @@ export async function pollOrderStatus(
                         }
                     } catch (error) {
                         console.error('Failed to parse data_out:', error);
-                        reject(new Error('获取PDF链接失败'));
+                        // 如果JSON解析失败，说明返回的不是正常的结果
+                        reject(new Error(`获取扫描结果失败: ${dataOutStr}`));
                     }
                 } else if (result.status === -1 || result.status === 2) {
                     // status: -1 或 2 可能表示失败

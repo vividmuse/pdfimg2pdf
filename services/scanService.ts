@@ -397,9 +397,47 @@ export async function performScan(
         onProgress?.('completed', 100);
         console.log('Scan completed, PDF URL:', resultUrl);
 
+        // 清理服务器上的临时文件
+        deleteOrderFiles(orderId).catch(err => {
+            console.warn('Failed to cleanup temporary files:', err);
+        });
+
         return resultUrl;  // 返回PDF URL供调用方使用
     } catch (error) {
         console.error('扫描流程失败:', error);
         throw error;
+    }
+}
+
+/**
+ * 删除订单关联的临时文件（静默操作）
+ */
+async function deleteOrderFiles(orderId: string): Promise<void> {
+    try {
+        const deleteEndpoint = import.meta.env.DEV
+            ? '/api/file/delete'
+            : 'https://p.xiexinbao.com/csj_wxkefu_file/delete';
+
+        const params = new URLSearchParams({
+            id: orderId,
+        });
+
+        const response = await fetch(deleteEndpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            },
+            body: params.toString(),
+            mode: 'cors',
+        });
+
+        if (response.ok) {
+            console.log('Temporary files deleted for order:', orderId);
+        } else {
+            console.warn('Delete request failed:', response.status);
+        }
+    } catch (error) {
+        // 静默失败，不影响用户体验
+        console.warn('Failed to delete temporary files:', error);
     }
 }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { ItemType, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation } from '../../types';
 import { useScanService } from '../hooks/useScanService';
 import { useTranslation } from '../i18n/LanguageContext';
-import { stitchImagesAndStamp } from '../../services/pdfService';
+import { stitchImagesAndStamp, generateGroupedImages } from '../../services/pdfService';
 
 interface ScanServicePanelProps {
     previewImages: Blob[];
@@ -43,7 +43,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
         const isSingleImage = originalFiles.length === 1 && originalFiles[0].type.startsWith('image/');
 
         if (isSingleImage) {
-            // 情兵1：单张图片 - 直接使用原始文件
+            // 情况1️⃣：单张图片 - 直接使用原始文件
             console.log('🖼️ 单图原图上传:', originalFiles[0].name, (originalFiles[0].size / 1024).toFixed(2), 'KB');
             const blob = await originalFiles[0].arrayBuffer().then(ab => new Blob([ab], { type: originalFiles[0].type }));
 
@@ -60,17 +60,20 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                 // 错误已在Hook中处理
             }
         } else {
-            // 情兵2：PDF多页 - 拼接原图成一张
+            // 情况2️⃣：PDF多页 - 按分组拼接并上传
             if (pdfPages.length === 0) {
                 alert(t('scan.pleaseProcessImages'));
                 return;
             }
 
             try {
-                console.log('🖼️ 拼接原图上传:', pdfPages.length, 'pages', layoutMode);
+                // 计算分组数
+                const groupCount = Math.ceil(pdfPages.length / pagesPerGroup);
 
-                // 使用stitchImagesAndStamp拼接原图
-                const stitchedImageUrl = await stitchImagesAndStamp(
+                console.log('📚 扫描处理:', groupCount, '组，每组', pagesPerGroup, '页');
+
+                // 生成所有分组图片
+                const groupedImageUrls = await generateGroupedImages(
                     pdfPages,
                     layoutMode,
                     pagesPerGroup,
@@ -78,18 +81,26 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                     orientation
                 );
 
-                // 将拼接后的URL转为Blob
-                const response = await fetch(stitchedImageUrl);
-                const blob = await response.blob();
+                console.log('✅ 生成', groupedImageUrls.length, '个分组');
 
-                console.log('✅ 拼接完成，大小:', (blob.size / 1024).toFixed(2), 'KB');
+                // 逐一上传每个分组
+                for (let i = 0; i < groupedImageUrls.length; i++) {
+                    console.log(`📤 上传分组 ${i + 1}/${groupedImageUrls.length}`);
 
-                // 上传拼接后的一张图片
-                const pdfUrl = await startScan([blob]);
-                console.log('Scan completed, loading PDF:', pdfUrl);
-                onScanComplete?.(pdfUrl);
+                    const response = await fetch(groupedImageUrls[i]);
+                    const blob = await response.blob();
+
+                    const pdfUrl = await startScan([blob]);
+
+                    console.log(`✅ 分组 ${i + 1} 完成，自动加载:`, pdfUrl);
+
+                    // 每完成一个PDF就自动加载到预览
+                    onScanComplete?.(pdfUrl);
+                }
+
+                console.log('🎉 所有分组扫描完成！');
             } catch (error) {
-                console.error('拼接原图失败:', error);
+                console.error('分组扫描失败:', error);
                 // 错误已在Hook中处理
             }
         }

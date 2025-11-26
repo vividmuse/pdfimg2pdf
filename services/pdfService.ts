@@ -667,17 +667,32 @@ export const stitchImagesAndStamp = async (
       const colIndex = i % cols;
       const rowIndex = Math.floor(i / cols);
 
-      // Scaled dimensions
-      const scaledImgWidth = imgData.width * contentScale;
-      const scaledImgHeight = imgData.height * contentScale;
+      // 格子的可用空间
+      const cellWidth = scaledMaxWidth;
+      const cellHeight = scaledMaxHeight;
+
+      // 计算图片在格子内的最大化尺寸（保持宽高比）
+      const imgAspectRatio = imgData.width / imgData.height;
+      const cellAspectRatio = cellWidth / cellHeight;
+
+      let drawWidth, drawHeight;
+      if (imgAspectRatio > cellAspectRatio) {
+        // 图片更宽，以宽度为准
+        drawWidth = cellWidth;
+        drawHeight = cellWidth / imgAspectRatio;
+      } else {
+        // 图片更高，以高度为准
+        drawHeight = cellHeight;
+        drawWidth = cellHeight * imgAspectRatio;
+      }
 
       // Top-left coordinate for this cell slot
       const cellX = startX + colIndex * (scaledMaxWidth + scaledGutter);
       const cellY = startY + rowIndex * (scaledMaxHeight + scaledGutter);
 
-      // Center the image within its specific slot
-      const imgX = cellX + (scaledMaxWidth - scaledImgWidth) / 2;
-      const imgY = cellY + (scaledMaxHeight - scaledImgHeight) / 2;
+      // Center the image within its cell
+      const imgX = cellX + (cellWidth - drawWidth) / 2;
+      const imgY = cellY + (cellHeight - drawHeight) / 2;
 
       // -- Comic Strip Styling --
 
@@ -688,7 +703,7 @@ export const stitchImagesAndStamp = async (
       ctx.shadowOffsetY = 5;
 
       // 2. Draw Image with scaled dimensions
-      ctx.drawImage(img, imgX, imgY, scaledImgWidth, scaledImgHeight);
+      ctx.drawImage(img, imgX, imgY, drawWidth, drawHeight);
 
       // Reset Shadow for subsequent strokes
       ctx.shadowColor = "transparent";
@@ -699,7 +714,7 @@ export const stitchImagesAndStamp = async (
       // 3. Border (Black outline)
       ctx.strokeStyle = "#1e293b"; // Slate-800
       ctx.lineWidth = 3 * contentScale; // Scale border with content
-      ctx.strokeRect(imgX, imgY, scaledImgWidth, scaledImgHeight);
+      ctx.strokeRect(imgX, imgY, drawWidth, drawHeight);
 
       // 4. Page Number Badge (Comic order)
       const badgeSize = 40;

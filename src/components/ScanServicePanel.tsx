@@ -1,15 +1,28 @@
 import React, { useState } from 'react';
-import type { ItemType } from '../../types';
+import type { ItemType, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation } from '../../types';
 import { useScanService } from '../hooks/useScanService';
 import { useTranslation } from '../i18n/LanguageContext';
+import { stitchImagesAndStamp } from '../../services/pdfService';
 
 interface ScanServicePanelProps {
     previewImages: Blob[];
+    originalFiles: File[];  // 原始文件
+    pdfPages: PdfPageImage[];  // 原始页面数据
+    layoutMode: LayoutMode;  // 布局模式
+    pagesPerGroup: number;  // 分组
+    processingConfig: ProcessingConfig;  // 处理配置
+    orientation: PageOrientation;  // 方向
     onScanComplete?: (pdfUrl: string) => void;
 }
 
 export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
     previewImages,
+    originalFiles,
+    pdfPages,
+    layoutMode,
+    pagesPerGroup,
+    processingConfig,
+    orientation,
     onScanComplete,
 }) => {
     const { t } = useTranslation();
@@ -26,17 +39,59 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
     const [showConfig, setShowConfig] = useState(false);
 
     const handleStartScan = async () => {
-        if (previewImages.length === 0) {
-            alert(t('scan.pleaseProcessImages'));
-            return;
-        }
+        // 判断是否为单张原始图片
+        const isSingleImage = originalFiles.length === 1 && originalFiles[0].type.startsWith('image/');
 
-        try {
-            const pdfUrl = await startScan(previewImages);
-            console.log('Scan completed, loading PDF:', pdfUrl);
-            onScanComplete?.(pdfUrl);
-        } catch (error) {
-            // 错误已在Hook中处理
+        if (isSingleImage) {
+            // 情兵1：单张图片 - 直接使用原始文件
+            console.log('🖼️ 单图原图上传:', originalFiles[0].name, (originalFiles[0].size / 1024).toFixed(2), 'KB');
+            const blob = await originalFiles[0].arrayBuffer().then(ab => new Blob([ab], { type: originalFiles[0].type }));
+
+            if (blob.size === 0) {
+                alert(t('scan.pleaseProcessImages'));
+                return;
+            }
+
+            try {
+                const pdfUrl = await startScan([blob]);
+                console.log('Scan completed, loading PDF:', pdfUrl);
+                onScanComplete?.(pdfUrl);
+            } catch (error) {
+                // 错误已在Hook中处理
+            }
+        } else {
+            // 情兵2：PDF多页 - 拼接原图成一张
+            if (pdfPages.length === 0) {
+                alert(t('scan.pleaseProcessImages'));
+                return;
+            }
+
+            try {
+                console.log('🖼️ 拼接原图上传:', pdfPages.length, 'pages', layoutMode);
+
+                // 使用stitchImagesAndStamp拼接原图
+                const stitchedImageUrl = await stitchImagesAndStamp(
+                    pdfPages,
+                    layoutMode,
+                    pagesPerGroup,
+                    processingConfig,
+                    orientation
+                );
+
+                // 将拼接后的URL转为Blob
+                const response = await fetch(stitchedImageUrl);
+                const blob = await response.blob();
+
+                console.log('✅ 拼接完成，大小:', (blob.size / 1024).toFixed(2), 'KB');
+
+                // 上传拼接后的一张图片
+                const pdfUrl = await startScan([blob]);
+                console.log('Scan completed, loading PDF:', pdfUrl);
+                onScanComplete?.(pdfUrl);
+            } catch (error) {
+                console.error('拼接原图失败:', error);
+                // 错误已在Hook中处理
+            }
         }
     };
 

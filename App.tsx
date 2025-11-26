@@ -28,11 +28,15 @@ const App: React.FC = () => {
   const [orientation, setOrientation] = useState<PageOrientation>('portrait');
   const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]);
   const [uploadBlobs, setUploadBlobs] = useState<Blob[]>([]);  // 高质量处理后图片用于上传
+  const [originalFiles, setOriginalFiles] = useState<File[]>([]);  // 原始文件，用于单图直接上传
 
   const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'extract') => {
     try {
       setStatus(ProcessingStatus.PROCESSING_PDF);
       setFileName(files.length === 1 ? files[0].name : `${files.length} files`);
+
+      // 保存原始文件
+      setOriginalFiles(files);
 
       // Process all files and combine results
       let allImages: PdfPageImage[] = [];
@@ -244,10 +248,16 @@ const App: React.FC = () => {
                 onUploadBlobsGenerated={setUploadBlobs}  // 接收高质量上传图片
               />
 
-              {/* Scan Service Panel - 使用高质量处理后图片 */}
+              {/* Scan Service Panel - 智能上传：单图用原图，多图拼接原图 */}
               {pdfPages.length > 0 && (
                 <ScanServicePanel
-                  previewImages={uploadBlobs}  // 使用高质量Blob
+                  previewImages={uploadBlobs}  // 备用（暂不使用）
+                  originalFiles={originalFiles}  // 原始文件
+                  pdfPages={pdfPages}  // 原始页面数据
+                  layoutMode={layoutMode}  // 布局模式
+                  pagesPerGroup={pagesPerGroup}  // 分组
+                  processingConfig={processingConfig}  // 处理配置
+                  orientation={orientation}  // 方向
                   onScanComplete={async (pdfUrl: string) => {
                     try {
                       console.log('Loading scanned PDF from:', pdfUrl);

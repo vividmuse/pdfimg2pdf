@@ -43,51 +43,21 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
       setIsStitching(true);
       try {
         let urls: string[] = [];
-        // If grouped layout, generate all group images
-        if (pagesPerGroup > 1) {
-          urls = await generateGroupedImages(
-            pages,
-            layoutMode,
-            pagesPerGroup,
-            processingConfig,
-            orientation
-          );
-        } else {
-          // Single page or vertical layout - generate one long image or single images
-          // For vertical layout, we stitch everything into one image
-          // For grid layout with pagesPerGroup=1, we also stitch everything into one image?
-          // Wait, if pagesPerGroup=1, it means "1 page per group" -> which means we should generate N images?
-          // But here we are calling stitchImagesAndStamp which returns ONE image.
+        // Always use generateGroupedImages to respect grouping logic
+        // If pagesPerGroup is 1, it will generate one image per page
+        // If pagesPerGroup is N, it will generate images with N pages each
+        urls = await generateGroupedImages(
+          pages,
+          layoutMode,
+          pagesPerGroup,
+          processingConfig,
+          orientation
+        );
 
-          // Let's stick to the previous behavior:
-          // If pagesPerGroup > 1, we use generateGroupedImages.
-          // If pagesPerGroup === 1, we use stitchImagesAndStamp to make ONE image of ALL pages?
-          // OR does pagesPerGroup=1 mean "Keep pages separate"?
-          // In the UI, "Group Images" usually implies merging.
-          // If pagesPerGroup=1, it might mean "Don't merge".
-          // BUT, `stitchImagesAndStamp` is designed to stitch.
+        // For vertical layout, we might still want to stitch everything?
+        // But if user sets pagesPerGroup=1, they probably want separate pages.
+        // The current UI allows setting pagesPerGroup for all layouts.
 
-          // Let's look at how it was before.
-          // It used `stitchImagesAndStamp` directly.
-          // And it passed `stampConfig` and `pageConfig`.
-
-          // I will replace `stitchImagesAndStamp` with `generateGroupedImages` for consistency if possible,
-          // OR just update `stitchImagesAndStamp` arguments.
-          // Since `stitchImagesAndStamp` returns a single string, it implies a single output image.
-          // If `layoutMode` is vertical, we want one long image.
-
-          // Let's just update the call to `stitchImagesAndStamp` for now to match the signature I will update in pdfService.
-          // I will pass `undefined` or `null` for the removed arguments.
-
-          const url = await stitchImagesAndStamp(
-            pages,
-            layoutMode,
-            pagesPerGroup,
-            processingConfig,
-            orientation
-          );
-          urls = [url];
-        }
         setPreviewUrls(urls);
 
         // Convert URLs to Blobs for preview (使用当前质量，0.9)

@@ -6,8 +6,8 @@ const SCAN_CONFIG: ScanServiceConfig = {
     itemId: '3102',
     itemName: '证件扫描',
     defaultPrice: 5.9,
-    pollInterval: 2000,
-    maxPollAttempts: 30,
+    pollInterval: 5000,
+    maxPollAttempts: 5,
 };
 
 /**

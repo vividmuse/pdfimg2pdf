@@ -183,7 +183,7 @@ export async function createScanOrder(
             user_id: userId,
             price: config.price,
             data_in: JSON.stringify(dataIn),
-            pay_callback: `https://your-domain.com/result?id=${orderId}`,
+            pay_callback: `https://0.4055.cn/cl/common/html/file_result_mpj_v${orderId}.html?id=${orderId}&saveType=file`,
             pay_tc: 'single',
             data_out: '',
             data_out_temp: imageUrls[0] || '',

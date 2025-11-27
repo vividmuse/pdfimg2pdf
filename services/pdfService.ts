@@ -776,3 +776,35 @@ export const generateGroupedImages = async (
 
   return results;
 };
+
+/**
+ * Rotate an image URL by 90 degrees clockwise
+ * Used for correcting landscape A4/A3 images before uploading to scan service
+ * (because scan service defaults to portrait PDF)
+ */
+export const rotateImageURL = async (imageUrl: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      // Swap width and height for 90 degree rotation
+      canvas.width = img.height;
+      canvas.height = img.width;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+
+      // Rotate context
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(90 * Math.PI / 180);
+      ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+      resolve(canvas.toDataURL('image/jpeg', 0.95));
+    };
+    img.onerror = reject;
+    img.src = imageUrl;
+  });
+};

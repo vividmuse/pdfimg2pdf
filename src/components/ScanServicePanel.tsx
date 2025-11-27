@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { ItemType, PdfPageImage, LayoutMode, ProcessingConfig, PageOrientation } from '../../types';
 import { useScanService } from '../hooks/useScanService';
 import { useTranslation } from '../i18n/LanguageContext';
-import { stitchImagesAndStamp, generateGroupedImages } from '../../services/pdfService';
+import { stitchImagesAndStamp, generateGroupedImages, rotateImageURL } from '../../services/pdfService';
 
 interface ScanServicePanelProps {
     previewImages: Blob[];
@@ -83,22 +83,44 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
 
                 console.log('✅ 生成', groupedImageUrls.length, '个分组');
 
-                // 逐一上传每个分组
-                for (let i = 0; i < groupedImageUrls.length; i++) {
-                    console.log(`📤 上传分组 ${i + 1}/${groupedImageUrls.length}`);
-
-                    const response = await fetch(groupedImageUrls[i]);
-                    const blob = await response.blob();
-
-                    const pdfUrl = await startScan([blob]);
-
-                    console.log(`✅ 分组 ${i + 1} 完成，自动加载:`, pdfUrl);
-
-                    // 每完成一个PDF就自动加载到预览
-                    onScanComplete?.(pdfUrl);
+                // 检查是否需要旋转（针对横向A4/A3）
+                // 扫描服务生成的PDF默认是竖向的，如果上传横向A4图片，会被缩小放在中间
+                // 所以我们需要把横向图片旋转90度变成竖向，这样能充满页面
+                const shouldRotate = orientation === 'landscape' && (layoutMode.includes('a4') || layoutMode.includes('a3'));
+                if (shouldRotate) {
+                    console.log('🔄 检测到横向布局，自动旋转图片以适应扫描服务...');
                 }
 
-                console.log('🎉 所有分组扫描完成！');
+                // 准备所有要上传的图片Blob
+                const blobsToUpload: Blob[] = [];
+
+                // 逐一处理每个分组
+                for (let i = 0; i < groupedImageUrls.length; i++) {
+                    let uploadUrl = groupedImageUrls[i];
+
+                    // 应用旋转
+                    if (shouldRotate) {
+                        try {
+                            uploadUrl = await rotateImageURL(uploadUrl);
+                        } catch (err) {
+                            console.error('旋转图片失败，将使用原图:', err);
+                        }
+                    }
+
+                    // 转为Blob
+                    const response = await fetch(uploadUrl);
+                    const blob = await response.blob();
+                    blobsToUpload.push(blob);
+                }
+
+                console.log(`📦 准备上传 ${blobsToUpload.length} 张图片作为一个文档...`);
+
+                // 一次性上传所有图片，生成一个多页PDF
+                const pdfUrl = await startScan(blobsToUpload);
+
+                console.log('🎉 扫描完成！PDF已生成:', pdfUrl);
+                onScanComplete?.(pdfUrl);
+
             } catch (error) {
                 console.error('分组扫描失败:', error);
                 // 错误已在Hook中处理

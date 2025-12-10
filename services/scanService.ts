@@ -280,6 +280,24 @@ export async function pollOrderStatus(
                     // 检查data_out是否是错误消息
                     const dataOutStr = String(result.data_out).trim();
 
+                    // 后端偶尔返回 paid_do（订单已支付但仍在生成中），此时用 data_out_temp 兜底或继续轮询
+                    if (dataOutStr === 'paid_do') {
+                        const tempUrl = typeof result.data_out_temp === 'string' ? result.data_out_temp : '';
+                        if (/\.pdf(\?|$)/i.test(tempUrl)) {
+                            onProgress?.(100);
+                            console.log('PDF ready from temp url:', tempUrl);
+                            resolve(tempUrl);
+                            return;
+                        }
+
+                        console.log('Order still processing (paid_do), continue polling...', {
+                            attempts,
+                            data_out_temp: tempUrl
+                        });
+                        setTimeout(poll, SCAN_CONFIG.pollInterval);
+                        return;
+                    }
+
                     // 如果包含错误关键词，说明处理失败
                     if (dataOutStr.includes('出错') || dataOutStr.includes('失败') || dataOutStr.includes('error') || dataOutStr.includes('Error')) {
                         reject(new Error(`扫描服务处理失败: ${dataOutStr}`));
@@ -306,6 +324,14 @@ export async function pollOrderStatus(
                         }
                     } catch (error) {
                         console.error('Failed to parse data_out:', error);
+                        // 如果有临时PDF地址，仍然尝试返回
+                        const tempUrl = typeof result.data_out_temp === 'string' ? result.data_out_temp : '';
+                        if (/\.pdf(\?|$)/i.test(tempUrl)) {
+                            onProgress?.(100);
+                            console.log('PDF ready from temp url after parse error:', tempUrl);
+                            resolve(tempUrl);
+                            return;
+                        }
                         // 如果JSON解析失败，说明返回的不是正常的结果
                         reject(new Error(`获取扫描结果失败: ${dataOutStr}`));
                     }

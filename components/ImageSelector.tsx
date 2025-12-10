@@ -5,6 +5,8 @@ import { useTranslation } from '../src/i18n/LanguageContext';
 
 interface ImageSelectorProps {
     images: PdfPageImage[];
+    activeIndex?: number;
+    onSelect?: (index: number) => void;
     onRemove: (index: number) => void;
     onKeepOdd: () => void;
     onKeepEven: () => void;
@@ -12,7 +14,7 @@ interface ImageSelectorProps {
     onClear: () => void;
 }
 
-const ImageSelector: React.FC<ImageSelectorProps> = ({ images, onRemove, onKeepOdd, onKeepEven, onAutoClean, onClear }) => {
+const ImageSelector: React.FC<ImageSelectorProps> = ({ images, activeIndex = 0, onSelect, onRemove, onKeepOdd, onKeepEven, onAutoClean, onClear }) => {
     const { t } = useTranslation();
 
     if (images.length === 0) return null;
@@ -63,8 +65,12 @@ const ImageSelector: React.FC<ImageSelectorProps> = ({ images, onRemove, onKeepO
 
             <div className="flex space-x-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
                 {images.map((img, index) => (
-                    <div key={index} className="relative group shrink-0">
-                        <div className="w-32 h-32 bg-slate-100 rounded-lg border border-slate-200 overflow-hidden flex items-center justify-center">
+                    <div
+                        key={index}
+                        className={`relative group shrink-0 cursor-pointer ${activeIndex === index ? 'ring-2 ring-[#d97757] ring-offset-2' : ''}`}
+                        onClick={() => onSelect?.(index)}
+                    >
+                        <div className={`w-32 h-32 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center ${activeIndex === index ? 'border-2 border-[#d97757]' : 'border border-slate-200'}`}>
                             <img
                                 src={img.blob}
                                 alt={`Item ${index + 1}`}

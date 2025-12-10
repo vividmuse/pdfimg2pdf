@@ -29,6 +29,7 @@ const App: React.FC = () => {
   const [previewBlobs, setPreviewBlobs] = useState<Blob[]>([]);
   const [uploadBlobs, setUploadBlobs] = useState<Blob[]>([]);  // 高质量处理后图片用于上传
   const [originalFiles, setOriginalFiles] = useState<File[]>([]);  // 原始文件，用于单图直接上传
+  const [selectedPageIndex, setSelectedPageIndex] = useState<number>(0);  // 当前用于取色/预览的页面
 
   const handleFileSelect = async (files: File[], mode: 'render' | 'extract' = 'extract') => {
     try {
@@ -62,6 +63,7 @@ const App: React.FC = () => {
       }
 
       setPdfPages(allImages);
+      setSelectedPageIndex(0);
       setStatus(ProcessingStatus.READY);
 
       // uploadBlobs会在PreviewArea的onUploadBlobsGenerated中设置
@@ -83,15 +85,22 @@ const App: React.FC = () => {
 
   const handleRemovePage = (index: number) => {
     setPdfPages(prev => prev.filter((_, i) => i !== index));
+    setSelectedPageIndex(prev => {
+      if (prev > index) return prev - 1;
+      if (prev === index) return Math.max(0, prev - 1);
+      return prev;
+    });
     // uploadBlobs会由PreviewArea自动重新生成
   };
 
   const handleKeepOdd = () => {
     setPdfPages(prev => prev.filter((_, i) => i % 2 === 0));
+    setSelectedPageIndex(0);
   };
 
   const handleKeepEven = () => {
     setPdfPages(prev => prev.filter((_, i) => i % 2 !== 0));
+    setSelectedPageIndex(0);
   };
 
   const handleAutoClean = () => {
@@ -112,6 +121,7 @@ const App: React.FC = () => {
 
   const handleClear = () => {
     setPdfPages([]);
+    setSelectedPageIndex(0);
     setStatus(ProcessingStatus.IDLE);
     setProcessingConfig({
       threshold: 0,
@@ -217,7 +227,7 @@ const App: React.FC = () => {
               <ProcessingControls
                 config={processingConfig}
                 onChange={setProcessingConfig}
-                sampleImage={pdfPages[0]}
+                sampleImage={pdfPages[selectedPageIndex] || pdfPages[0]}
               />
 
               {/* Group Controls - Always visible now to allow merging pages */}
@@ -231,6 +241,8 @@ const App: React.FC = () => {
             <div className="lg:col-span-8">
               <ImageSelector
                 images={pdfPages}
+                activeIndex={selectedPageIndex}
+                onSelect={setSelectedPageIndex}
                 onRemove={handleRemovePage}
                 onKeepOdd={handleKeepOdd}
                 onKeepEven={handleKeepEven}

@@ -284,6 +284,8 @@ const App: React.FC = () => {
                       const images = await convertPdfToImages(file, 'render');
                       setPdfPages(images);
                       setFileName('scanned.pdf');
+                      // 扫描完成后重置分组为 1（每页一张），避免结果再次被合并
+                      setPagesPerGroup(1);
 
                       setStatus(ProcessingStatus.READY);
 

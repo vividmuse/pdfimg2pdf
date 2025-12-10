@@ -7,7 +7,7 @@ const SCAN_CONFIG: ScanServiceConfig = {
     itemName: '证件扫描',
     defaultPrice: 5.9,
     pollInterval: 5000,
-    maxPollAttempts: 5,
+    maxPollAttempts: 15, // 扫描生成有时>25s，放宽超时时间避免误报网络异常
 };
 
 /**
@@ -276,9 +276,27 @@ export async function pollOrderStatus(
                 // 检查订单完成状态
                 // status: 1 表示订单已完成
                 // data_out: 包含PDF下载链接（JSON字符串）或错误消息（纯文本）
-                if (result.status === 1 && result.data_out) {
-                    // 检查data_out是否是错误消息
-                    const dataOutStr = String(result.data_out).trim();
+                if (result.status === 1 && (result.data_out || result.result_msg)) {
+                    const dataOutStr = result.data_out ? String(result.data_out).trim() : '';
+
+                    // 优先解析 result_msg 的 preview_file_url（服务端 ready=1 表示已生成）
+                    if (result.result_msg) {
+                        try {
+                            const msg = typeof result.result_msg === 'string'
+                                ? JSON.parse(result.result_msg)
+                                : result.result_msg;
+                            const previewUrl = msg?.preview_file_url;
+                            const ready = msg?.ready === 1 || msg?.ready === '1';
+                            if (previewUrl && ready) {
+                                onProgress?.(100);
+                                console.log('PDF ready from result_msg preview:', previewUrl);
+                                resolve(previewUrl);
+                                return;
+                            }
+                        } catch (e) {
+                            console.warn('Failed to parse result_msg:', e);
+                        }
+                    }
 
                     // 后端偶尔返回 paid_do（订单已支付但仍在生成中），此时用 data_out_temp 兜底或继续轮询
                     if (dataOutStr === 'paid_do') {

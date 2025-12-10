@@ -538,13 +538,13 @@ export const stitchImagesAndStamp = async (
 
   // Style constants for Comic Strip mode
   const isGrid = layoutMode.startsWith('grid');
-  // Tighter layout for grouped pages；随着页数增多自动收紧留白
+  // 更紧凑的 grouped 布局：初始留白即较小，并随页数自动收紧
   const itemCount = processedImages.length;
-  const baseGutter = isGrid ? 24 : 0;
-  const baseOuter = isGrid ? 24 : 0;
-  const shrink = Math.min(itemCount * 2, 12); // 多页时逐步缩小留白
-  const GUTTER_SIZE = isGrid ? Math.max(8, baseGutter - shrink) : 0;
-  const OUTER_PADDING = isGrid ? Math.max(12, baseOuter - Math.floor(shrink / 1.5)) : 0;
+  const baseGutter = isGrid ? 16 : 0;
+  const baseOuter = isGrid ? 8 : 0;
+  const shrink = Math.min(itemCount * 1.8, 12); // 页数多时逐步缩小留白
+  const GUTTER_SIZE = isGrid ? Math.max(4, baseGutter - shrink) : 0;
+  const OUTER_PADDING = isGrid ? Math.max(4, baseOuter - Math.floor(shrink / 2)) : 0;
 
   if (layoutMode === 'vertical') {
     canvasWidth = maxWidth;
@@ -643,8 +643,8 @@ export const stitchImagesAndStamp = async (
     let contentScale = 1;
     const scaleX = availableWidth / rawContentWidth;
     const scaleY = availableHeight / rawContentHeight;
-    // 允许轻微放大填充空白（最多放大到1.08），避免多图拼接时留大片空隙
-    const maxUpScale = 1.08;
+    // 允许放大填充空白（最多放大到1.15），避免多图拼接时留大片空隙
+    const maxUpScale = 1.15;
     contentScale = Math.min(scaleX, scaleY, maxUpScale);
     if (contentScale > maxUpScale) contentScale = maxUpScale;
 

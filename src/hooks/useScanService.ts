@@ -43,6 +43,7 @@ export function useScanService(): UseScanServiceReturn {
                 isProcessing: false,
                 progress: 0,
                 error: null,
+                progressLabel: undefined,
             });
             setStage('idle');
 
@@ -50,13 +51,20 @@ export function useScanService(): UseScanServiceReturn {
             const pdfUrl = await performScan(
                 imageBlobs,
                 itemType,  // 使用itemType
-                (currentStage: string, progress: number) => {
+                (currentStage: string, progress: number, meta?: { current?: number; total?: number; attempts?: number }) => {
                     setStage(currentStage as ProgressStage);
+                    let progressLabel: string | undefined;
+                    if (currentStage === 'uploading' && meta?.current && meta?.total) {
+                        progressLabel = `上传 ${meta.current}/${meta.total}`;
+                    } else if (currentStage === 'processing' && meta?.attempts) {
+                        progressLabel = `查询第 ${meta.attempts} 次`;
+                    }
                     setState(prev => ({
                         ...prev,
                         progress,
                         isUploading: currentStage === 'uploading',
                         isProcessing: ['creating', 'processing'].includes(currentStage),
+                        progressLabel,
                     }));
                 }
             );

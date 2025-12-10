@@ -230,7 +230,7 @@ export async function createScanOrder(
  */
 export async function pollOrderStatus(
     orderId: string,
-    onProgress?: (progress: number) => void
+    onProgress?: (progress: number, attempts: number) => void
 ): Promise<string> {
     let attempts = 0;
 
@@ -246,7 +246,7 @@ export async function pollOrderStatus(
 
                 // 更新进度
                 const progress = Math.min(95, (attempts / SCAN_CONFIG.maxPollAttempts) * 100);
-                onProgress?.(progress);
+                onProgress?.(progress, attempts);
 
                 // 查询订单状态
                 const statusEndpoint = import.meta.env.DEV
@@ -316,7 +316,7 @@ export async function pollOrderStatus(
                         return;
                     }
 
-                    // 如果包含错误关键词，说明处理失败
+                    // 如果包含错误关键词，说明处理失败（直接报错）
                     if (dataOutStr.includes('出错') || dataOutStr.includes('失败') || dataOutStr.includes('error') || dataOutStr.includes('Error')) {
                         reject(new Error(`扫描服务处理失败: ${dataOutStr}`));
                         return;
@@ -350,8 +350,13 @@ export async function pollOrderStatus(
                             resolve(tempUrl);
                             return;
                         }
-                        // 如果JSON解析失败，说明返回的不是正常的结果
-                        reject(new Error(`获取扫描结果失败: ${dataOutStr}`));
+                        // 如果JSON解析失败但状态是完成，先继续轮询直到超时，再报错
+                        if (attempts < SCAN_CONFIG.maxPollAttempts) {
+                            console.log('Parse failed but status=1, keep polling...');
+                            setTimeout(poll, SCAN_CONFIG.pollInterval);
+                        } else {
+                            reject(new Error(`获取扫描结果失败: ${dataOutStr || '解析失败'}`));
+                        }
                     }
                 } else if (result.status === -1 || result.status === 2) {
                     // status: -1 或 2 可能表示失败
@@ -413,17 +418,17 @@ export async function downloadResult(resultUrl: string, filename: string = 'scan
 export async function performScan(
     imageBlobs: Blob[],
     itemType: 'document' | 'remove-handwriting' | 'remove-watermark' = 'document',
-    onProgress?: (stage: string, progress: number) => void
+    onProgress?: (stage: string, progress: number, meta?: { current?: number; total?: number; attempts?: number }) => void
 ): Promise<string> {  // 返回PDF URL
     try {
         // 阶段1: 上传图片 (0-60%)
-        onProgress?.('uploading', 0);
+        onProgress?.('uploading', 0, { current: 0, total: imageBlobs.length });
         const imageUrls: string[] = [];
 
         for (let i = 0; i < imageBlobs.length; i++) {
             const url = await uploadImage(imageBlobs[i], `image_${i + 1}.jpg`);
             imageUrls.push(url);
-            onProgress?.('uploading', ((i + 1) / imageBlobs.length) * 100);
+            onProgress?.('uploading', ((i + 1) / imageBlobs.length) * 100, { current: i + 1, total: imageBlobs.length });
         }
 
         // 阶段2: 创建订单
@@ -433,8 +438,8 @@ export async function performScan(
 
         // 阶段3: 等待处理
         onProgress?.('processing', 0);
-        const resultUrl = await pollOrderStatus(orderId, (progress) => {
-            onProgress?.('processing', progress);
+        const resultUrl = await pollOrderStatus(orderId, (progress, attempts) => {
+            onProgress?.('processing', progress, { attempts });
         });
 
         // 阶段4: 完成，返回PDF URL（不自动下载）

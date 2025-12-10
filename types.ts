@@ -115,4 +115,5 @@ export interface ScanServiceState {
   isProcessing: boolean;
   progress: number;
   error: string | null;
+  progressLabel?: string;
 }

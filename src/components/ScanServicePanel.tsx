@@ -274,7 +274,7 @@ export const ScanServicePanel: React.FC<ScanServicePanelProps> = ({
                         marginBottom: '8px',
                     }}>
                         <span style={{ fontSize: '14px', color: '#4f4f4f' }}>
-                            {stageMessage}
+                            {stageMessage}{state.progressLabel ? ` · ${state.progressLabel}` : ''}
                         </span>
                         <span style={{ fontSize: '14px', fontWeight: 600, color: '#667eea' }}>
                             {Math.round(state.progress)}%

@@ -160,7 +160,7 @@ export async function createScanOrder(
             ori_file_url: imageUrls,
             task_params: {
                 task_type: 'docscan',
-                preview_num: 1,  // 固定为1
+                preview_num: imageUrls.length,  // 与上传张数一致，避免只处理第一张
                 scan_mode: 'merge',  // 固定为merge
                 watermark: '',  // 空水印
             },

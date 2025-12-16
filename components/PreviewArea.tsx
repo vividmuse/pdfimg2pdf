@@ -150,13 +150,13 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
           padding: 0;
           margin: 0;
         ">
-          <img 
             src="${imgUrl}" 
             style="
-              max-width: 100%;
-              max-height: 100vh;
+              max-width: 95%;
+              max-height: 95vh;
               object-fit: contain;
               display: block;
+              margin: auto;
             "
           />
         </div>

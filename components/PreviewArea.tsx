@@ -146,15 +146,17 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
           display: flex;
           justify-content: center;
           align-items: center;
-          min-height: 100vh;
+          height: 100%;
+          width: 100%;
+          overflow: hidden;
           padding: 0;
           margin: 0;
         ">
           <img 
             src="${imgUrl}" 
             style="
-              max-width: 95%;
-              max-height: 95vh;
+              max-width: 100%;
+              max-height: 100%;
               object-fit: contain;
               display: block;
               margin: auto;
@@ -182,6 +184,8 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
             body {
               margin: 0;
               padding: 0;
+              width: 100%;
+              height: 100%;
             }
             @media print {
               body { margin: 0; }

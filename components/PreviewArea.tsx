@@ -146,7 +146,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
           display: flex;
           justify-content: center;
           align-items: center;
-          height: 100%;
+          height: 98vh; /* Slightly less than 100% to prevent margin spill */
           width: 100%;
           overflow: hidden;
           padding: 0;
@@ -185,11 +185,10 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
               margin: 0;
               padding: 0;
               width: 100%;
-              height: 100%;
             }
             @media print {
               body { margin: 0; }
-              img { page-break-inside: avoid; }
+              div { page-break-inside: avoid; }
             }
           </style>
         </head>

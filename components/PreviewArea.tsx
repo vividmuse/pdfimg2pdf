@@ -140,13 +140,15 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
     const imagesToPrint = url ? [url] : previewUrls;
     const imagesHtml = imagesToPrint
       .map((imgUrl, index) => `
-        <div style="
+        <div class="print-page" style="
           page-break-after: ${index < imagesToPrint.length - 1 ? 'always' : 'avoid'};
+          break-after: ${index < imagesToPrint.length - 1 ? 'page' : 'avoid'};
           page-break-inside: avoid;
+          break-inside: avoid;
           display: flex;
           justify-content: center;
-          align-items: center;
-          height: 98vh; /* Slightly less than 100% to prevent margin spill */
+          align-items: flex-start;
+          min-height: 100%;
           width: 100%;
           overflow: hidden;
           padding: 0;
@@ -157,9 +159,10 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
             style="
               max-width: 100%;
               max-height: 100%;
+              width: auto;
+              height: auto;
               object-fit: contain;
               display: block;
-              margin: auto;
             "
           />
         </div>
@@ -171,24 +174,54 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
       <html>
         <head>
           <title>Print</title>
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             @page {
               margin: 0;
-              size: auto;
+              padding: 0;
+              size: A4;
             }
-            * {
+            *, *::before, *::after {
               margin: 0;
               padding: 0;
               box-sizing: border-box;
             }
-            body {
-              margin: 0;
-              padding: 0;
+            html, body {
+              margin: 0 !important;
+              padding: 0 !important;
               width: 100%;
+              height: 100%;
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .print-page {
+              width: 100%;
+              height: 100%;
+              box-sizing: border-box;
+            }
+            .print-page img {
+              max-width: 100%;
+              max-height: 100%;
             }
             @media print {
-              body { margin: 0; }
-              div { page-break-inside: avoid; }
+              html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100%;
+                height: 100%;
+              }
+              .print-page {
+                page-break-inside: avoid;
+                break-inside: avoid;
+                height: 100vh;
+                width: 100vw;
+              }
+              .print-page img {
+                max-width: 100vw;
+                max-height: 100vh;
+                width: auto;
+                height: auto;
+              }
             }
           </style>
         </head>

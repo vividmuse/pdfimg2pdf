@@ -179,7 +179,7 @@ const PreviewArea: React.FC<PreviewAreaProps> = ({
             @page {
               margin: 0;
               padding: 0;
-              size: A4;
+              size: auto;
             }
             *, *::before, *::after {
               margin: 0;
